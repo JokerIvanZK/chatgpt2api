@@ -88,6 +88,8 @@ export function FingerprintPoolCard() {
 
   const persist = (next: PoolEntry[]) => {
     setEntries(next);
+    // 条目增删后行号变化,清空旧验证结果避免显示错位
+    setVerifyResults({});
     setFingerprintPool(next.length > 0 ? JSON.stringify(next) : "");
   };
 

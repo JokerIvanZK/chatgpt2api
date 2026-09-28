@@ -2080,7 +2080,13 @@ func (s *AccountService) remoteImpersonation(accessToken string) string {
 			return value
 		}
 	}
-	return firstNonEmpty(util.Clean(account["impersonate"]), s.proxy.ImpersonateProfile())
+	if value := util.Clean(account["impersonate"]); value != "" {
+		return value
+	}
+	if pool := s.FingerprintFor(accessToken); pool["impersonate"] != "" {
+		return pool["impersonate"]
+	}
+	return s.proxy.ImpersonateProfile()
 }
 
 func (s *AccountService) detectAccountType(accessToken string, mePayload, initPayload map[string]any) string {

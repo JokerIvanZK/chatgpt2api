@@ -161,8 +161,21 @@ func (s *AccountService) assignFingerprintLocked(token string, poolIndex int) {
 	if entry.SessionID == "" {
 		entry.SessionID = util.NewUUID()
 	}
+	// 用户在设置里明确选择的全局伪装优先于池分配:固定所有账号的 TLS 指纹
+	// (设备身份仍按池/账号独立),轮换时也保持固定。
+	if global := s.globalImpersonateLocked(); global != "" {
+		entry.Impersonate = global
+	}
 	s.fingerprints[token] = entry
 	s.saveFingerprintsLocked()
+}
+
+// globalImpersonateLocked 返回设置里明确选择的全局伪装;空表示未选择,按池分配。
+func (s *AccountService) globalImpersonateLocked() string {
+	if s.proxy == nil || s.proxy.config == nil {
+		return ""
+	}
+	return strings.TrimSpace(s.proxy.config.Impersonate())
 }
 
 func (s *AccountService) ensureFingerprintsLoadedLocked() {

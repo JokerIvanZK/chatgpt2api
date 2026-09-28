@@ -18,9 +18,10 @@ import (
 )
 
 type testAccountConfig struct {
-	textMode  string
-	imageMode string
-	fpPool    []map[string]string
+	textMode    string
+	imageMode   string
+	fpPool      []map[string]string
+	impersonate string
 }
 
 func (testAccountConfig) AutoRemoveInvalidAccounts() bool     { return false }
@@ -38,7 +39,7 @@ func (c testAccountConfig) ImageAccountScheduleMode() string {
 	return c.imageMode
 }
 func (testAccountConfig) Proxy() string                          { return "" }
-func (testAccountConfig) Impersonate() string                    { return "" }
+func (c testAccountConfig) Impersonate() string                  { return c.impersonate }
 func (c testAccountConfig) FingerprintPool() []map[string]string { return c.fpPool }
 
 func TestFetchRemoteInfoBootstrapsBeforeAccountRefresh(t *testing.T) {

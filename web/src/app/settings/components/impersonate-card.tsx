@@ -78,7 +78,7 @@ export function ImpersonateCard() {
               <h2 className="text-lg font-semibold tracking-tight">浏览器伪装</h2>
               <p className="text-sm text-stone-500">
                 每个账号默认由指纹池自动分配并保持粘性（7 天有效，命中 Cloudflare
-                挑战自动换下一个）；此处的全局值仅作为无账号场景（如代理测试）的兜底。
+                挑战自动换下一个）；这里选择具体变体可将全部账号固定为该 TLS 指纹。
               </p>
             </div>
           </div>
@@ -134,8 +134,9 @@ export function ImpersonateCard() {
                 </div>
               ) : (
                 <p className="text-sm text-stone-500">
-                  指纹池从下列实测可用的变体中按账号哈希分配。选择某个具体变体可以让所有账号固定使用它；
-                  也可以选「自定义…」填入其他 profile。单个账号在 fp 里手工指定的值优先级最高。
+                  留空（跟随默认）时由指纹池按账号哈希自动分配。选择某个具体变体会把所有
+                  账号固定为该 TLS 指纹（设备身份仍各自独立）；也可选「自定义…」。单个账号在
+                  fp 里手工指定的值优先级最高。
                 </p>
               )}
             </div>

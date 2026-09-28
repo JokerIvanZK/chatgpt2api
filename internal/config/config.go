@@ -472,6 +472,7 @@ func (s *Store) Get() map[string]any {
 	s.mu.RUnlock()
 	delete(data, "image_concurrent_limit")
 	data["impersonate"] = s.Impersonate()
+	data["fingerprint_pool"] = strings.TrimSpace(fmt.Sprint(s.settingValue("fingerprint_pool", "")))
 	data["refresh_account_interval_minute"] = s.RefreshAccountIntervalMinute()
 	data["image_task_timeout_seconds"] = s.ImageTaskTimeoutSeconds()
 	data["text_account_schedule_mode"] = s.TextAccountScheduleMode()

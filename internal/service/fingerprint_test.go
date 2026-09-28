@@ -134,3 +134,27 @@ func TestFingerprintCustomPoolEntry(t *testing.T) {
 		t.Fatal("两条目应循环轮换")
 	}
 }
+
+func TestFingerprintGlobalSettingPinsProfile(t *testing.T) {
+	backend := newTestStorageBackend(t)
+	cfg := testAccountConfig{impersonate: "mac-firefox"}
+	s := NewAccountService(backend, cfg, NewProxyService(cfg), NewLogService(backend))
+	token := "tok-pin"
+	s.AddAccounts([]string{token})
+	for i := 0; i < 3; i++ {
+		if got := s.FingerprintFor(token); got["impersonate"] != "mac-firefox" {
+			t.Fatalf("全局固定应覆盖池分配(第 %d 次): %v", i+1, got)
+		}
+		s.ReportFingerprintFailure(token)
+	}
+}
+
+func TestRemoteImpersonationUsesPoolBinding(t *testing.T) {
+	s := newTestAccountService(t)
+	token := "tok-remote-fp"
+	s.AddAccounts([]string{token})
+	binding := s.FingerprintFor(token)
+	if got := s.remoteImpersonation(token); got != binding["impersonate"] {
+		t.Fatalf("刷新链路应使用池绑定指纹: got=%s want=%s", got, binding["impersonate"])
+	}
+}
