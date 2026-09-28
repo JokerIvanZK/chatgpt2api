@@ -249,6 +249,13 @@ func (e *Engine) handleTextAccountErrorForRetry(accessToken string, err error, e
 			return true
 		}
 	}
+	if allowRetry && (isCloudflareChallengeErrorMessage(err.Error()) || util.IsProxyUpstreamFailure(err.Error())) {
+		// 文字对话是有状态的:不换号(不加 exhaustedTokens),只轮换指纹
+		// (新 TLS 变体 + 新设备 ID + 新代理哈希/出口 IP),同一账号重试。
+		// 若恰好调度到其他账号,已轮换的账号下次使用时也是新身份。
+		e.Accounts.ReportFingerprintFailure(accessToken)
+		return true
+	}
 	e.Accounts.ApplyAccountError(accessToken, "text_stream", err)
 	return false
 }
