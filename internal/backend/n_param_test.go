@@ -22,6 +22,7 @@ type nParamProxyConfig struct {
 func (c nParamProxyConfig) Proxy() string {
 	return c.proxy
 }
+func (c nParamProxyConfig) Impersonate() string { return "" }
 
 // TestNParamSequential exercises sequential image calls with one token.
 // Each call waits for the previous call to finish before starting the next one.

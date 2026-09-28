@@ -21,6 +21,7 @@ import (
 var settingEnvKeys = map[string]string{
 	"base_url":                          "CHATGPT2API_BASE_URL",
 	"proxy":                             "CHATGPT2API_PROXY",
+	"impersonate":                       "CHATGPT2API_IMPERSONATE",
 	"refresh_account_interval_minute":   "CHATGPT2API_REFRESH_ACCOUNT_INTERVAL_MINUTE",
 	"image_task_timeout_seconds":        "CHATGPT2API_IMAGE_TASK_TIMEOUT_SECONDS",
 	"user_default_concurrent_limit":     "CHATGPT2API_USER_DEFAULT_CONCURRENT_LIMIT",
@@ -299,6 +300,12 @@ func (s *Store) Proxy() string {
 	return strings.TrimSpace(fmt.Sprint(s.settingValue("proxy", "")))
 }
 
+// Impersonate 返回全局浏览器伪装配置（surf 的 impersonate profile）。
+// 空值表示未覆盖，实际生效值由 service.DefaultImpersonateProfile 兜底。
+func (s *Store) Impersonate() string {
+	return strings.TrimSpace(fmt.Sprint(s.settingValue("impersonate", "")))
+}
+
 func (s *Store) UpdateProxyURL() string {
 	if value := strings.TrimSpace(os.Getenv("CHATGPT2API_UPDATE_PROXY_URL")); value != "" {
 		return value
@@ -435,6 +442,7 @@ func (s *Store) Get() map[string]any {
 	data := util.CopyMap(s.data)
 	s.mu.RUnlock()
 	delete(data, "image_concurrent_limit")
+	data["impersonate"] = s.Impersonate()
 	data["refresh_account_interval_minute"] = s.RefreshAccountIntervalMinute()
 	data["image_task_timeout_seconds"] = s.ImageTaskTimeoutSeconds()
 	data["text_account_schedule_mode"] = s.TextAccountScheduleMode()
@@ -506,6 +514,9 @@ func (s *Store) Update(data map[string]any) (map[string]any, error) {
 	}
 	if value, ok := next["image_storage_limit_mb"]; ok {
 		next["image_storage_limit_mb"] = normalizeNonNegativeInt(value)
+	}
+	if value, ok := next["impersonate"]; ok {
+		next["impersonate"] = normalizeImpersonate(value)
 	}
 	if value, ok := next["default_billing_type"]; ok {
 		next["default_billing_type"] = normalizeDefaultBillingType(value)
@@ -822,6 +833,17 @@ func normalizeAccountScheduleMode(value any) string {
 		return "fill_first"
 	}
 	return "load_balance"
+}
+
+// normalizeImpersonate 只做裁剪和长度限制，不做白名单：
+// profile 的语义由 surf 的匹配规则决定（含 firefox/android/ios/mac/linux 等关键字），
+// 需要支持自定义值，因此保持宽松。
+func normalizeImpersonate(value any) string {
+	text := strings.TrimSpace(fmt.Sprint(value))
+	if len(text) > 64 {
+		return text[:64]
+	}
+	return text
 }
 
 func normalizeNonNegativeInt(value any) int {

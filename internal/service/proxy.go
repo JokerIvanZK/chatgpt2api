@@ -23,8 +23,14 @@ import (
 // 的浏览器模板覆盖，只有 builder 层的值能真正到达线缆。
 const browserAcceptLanguage = "zh-CN,zh;q=0.9,en;q=0.8,en-US;q=0.7"
 
+// DefaultImpersonateProfile 是未配置任何伪装时的兜底值。
+// 2026-09 实测：Cloudflare 已识别 surf 的 Chrome 指纹（同一代理下所有 Chrome
+// 系 profile 请求 chatgpt.com 首页一律 403 challenge），Firefox 系全部 200。
+const DefaultImpersonateProfile = "firefox"
+
 type ProxyConfig interface {
 	Proxy() string
+	Impersonate() string
 }
 
 type ProxyService struct {
@@ -43,8 +49,20 @@ func (s *ProxyService) HTTPClient(timeout time.Duration) *http.Client {
 	return HTTPClientForProxy(s.config.Proxy(), timeout)
 }
 
+// ImpersonateProfile 返回实际生效的全局伪装配置：设置里的 impersonate 优先，
+// 空则回退到 DefaultImpersonateProfile。nil 接收者安全。
+func (s *ProxyService) ImpersonateProfile() string {
+	if s == nil || s.config == nil {
+		return DefaultImpersonateProfile
+	}
+	if value := strings.TrimSpace(s.config.Impersonate()); value != "" {
+		return value
+	}
+	return DefaultImpersonateProfile
+}
+
 func (s *ProxyService) BrowserHTTPClient(timeout time.Duration) *http.Client {
-	return browserHTTPClient(s.config.Proxy(), timeout)
+	return browserHTTPClientForProfile(s.config.Proxy(), s.ImpersonateProfile(), timeout)
 }
 
 func (s *ProxyService) BrowserHTTPClientWithProfile(profile string, timeout time.Duration) *http.Client {
@@ -64,7 +82,7 @@ func (s *ProxyService) Test(candidate string, timeout time.Duration) map[string]
 	if err != nil || parsed.Host == "" || (parsed.Scheme != "http" && parsed.Scheme != "https" && parsed.Scheme != "socks5" && parsed.Scheme != "socks5h") {
 		return map[string]any{"ok": false, "status": 0, "latency_ms": 0, "error": "invalid proxy url"}
 	}
-	client := browserHTTPClientForProfile(candidate, "", timeout)
+	client := browserHTTPClientForProfile(candidate, s.ImpersonateProfile(), timeout)
 	ctx, cancel := context.WithTimeout(context.Background(), timeout)
 	defer cancel()
 	req, _ := http.NewRequestWithContext(ctx, http.MethodGet, "https://chatgpt.com/", nil)

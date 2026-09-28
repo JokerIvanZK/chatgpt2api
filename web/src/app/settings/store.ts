@@ -193,6 +193,7 @@ type SettingsStore = {
   setImageAccountScheduleMode: (value: AccountScheduleMode) => void;
   setLogLevel: (level: string, enabled: boolean) => void;
   setProxy: (value: string) => void;
+  setImpersonate: (value: string) => void;
   setBaseUrl: (value: string) => void;
   setRegistrationEnabled: (value: boolean) => void;
   setLinuxDoEnabled: (value: boolean) => void;
@@ -462,6 +463,20 @@ export const useSettingsStore = create<SettingsStore>((set, get) => ({
         config: {
           ...state.config,
           proxy: value,
+        },
+      };
+    });
+  },
+
+  setImpersonate: (value) => {
+    set((state) => {
+      if (!state.config) {
+        return {};
+      }
+      return {
+        config: {
+          ...state.config,
+          impersonate: value,
         },
       };
     });

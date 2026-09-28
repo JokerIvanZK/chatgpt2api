@@ -77,8 +77,6 @@ type AccountService struct {
 const (
 	defaultRemoteUserAgent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.0.0 Safari/537.36"
 	defaultRemoteSecCHUA   = `"Not:A-Brand";v="99", "Google Chrome";v="145", "Chromium";v="145"`
-	// 与 backend.browserImpersonationProfile 同因：Chrome 指纹被 CF 识别，改用 Firefox 伪装。
-	defaultRemoteProfile = "firefox"
 )
 
 func NewAccountService(backend storage.Backend, config AccountConfig, proxy *ProxyService, logs *LogService) *AccountService {
@@ -106,7 +104,7 @@ func NewAccountService(backend storage.Backend, config AccountConfig, proxy *Pro
 	}
 	// Initialize SessionRefresher with the uTLS client for /api/auth/session.
 	s.refresher = NewSessionRefresher(func(req *http.Request) (*http.Response, error) {
-		client := s.browserHTTPClient(defaultRemoteProfile, refreshTimeout)
+		client := s.browserHTTPClient(s.proxy.ImpersonateProfile(), refreshTimeout)
 		if client == nil {
 			client = &http.Client{Timeout: refreshTimeout}
 		}
@@ -2074,7 +2072,7 @@ func (s *AccountService) remoteImpersonation(accessToken string) string {
 			return value
 		}
 	}
-	return firstNonEmpty(util.Clean(account["impersonate"]), defaultRemoteProfile)
+	return firstNonEmpty(util.Clean(account["impersonate"]), s.proxy.ImpersonateProfile())
 }
 
 func (s *AccountService) detectAccountType(accessToken string, mePayload, initPayload map[string]any) string {

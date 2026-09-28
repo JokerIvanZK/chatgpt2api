@@ -36,7 +36,8 @@ func (c testAccountConfig) ImageAccountScheduleMode() string {
 	}
 	return c.imageMode
 }
-func (testAccountConfig) Proxy() string { return "" }
+func (testAccountConfig) Proxy() string       { return "" }
+func (testAccountConfig) Impersonate() string { return "" }
 
 func TestFetchRemoteInfoBootstrapsBeforeAccountRefresh(t *testing.T) {
 	var mu sync.Mutex

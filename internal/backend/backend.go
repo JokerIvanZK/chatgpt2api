@@ -30,6 +30,7 @@ const (
 	browserSecCHUAPlatformVersion = `"19.0.0"`
 	browserSecCHUAArch            = `"x86"`
 	browserSecCHUABitness         = `"64"`
+	// 内置兜底伪装（全局设置 impersonate 为空时使用）。
 	// Cloudflare 已能识别 surf 的 Chrome 指纹（chrome145 的 TLS/HTTP2 特征，2026-09
 	// 实测同一代理下所有 Chrome 系 profile 首页一律 403 challenge，Firefox 系全部 200）。
 	// Firefox 模板会同时强制配套的 Firefox UA 与 Accept，请求级 UA/sec-ch-ua 会被覆盖。
@@ -197,6 +198,14 @@ func (c *Client) StreamConversation(ctx context.Context, messages []map[string]a
 	return out, errCh
 }
 
+// defaultImpersonate 全局设置（设置页/CHATGPT2API_IMPERSONATE）优先，空则用内置兜底。
+func (c *Client) defaultImpersonate() string {
+	if profile := c.proxy.ImpersonateProfile(); profile != "" {
+		return profile
+	}
+	return browserImpersonationProfile
+}
+
 func (c *Client) buildFingerprint() map[string]string {
 	account := map[string]any{}
 	if c.AccessToken != "" && c.lookup != nil {
@@ -217,7 +226,7 @@ func (c *Client) buildFingerprint() map[string]string {
 	}
 	defaults := map[string]string{
 		"user-agent":         browserUserAgent,
-		"impersonate":        browserImpersonationProfile,
+		"impersonate":        c.defaultImpersonate(),
 		"oai-device-id":      util.NewUUID(),
 		"oai-session-id":     util.NewUUID(),
 		"sec-ch-ua-mobile":   browserSecCHUAMobile,
@@ -240,7 +249,7 @@ func (c *Client) applyBrowserFingerprint() {
 			c.fp[key] = value
 		}
 	}
-	setDefault("impersonate", browserImpersonationProfile)
+	setDefault("impersonate", c.defaultImpersonate())
 	setDefault("user-agent", browserUserAgent)
 	setDefault("sec-ch-ua-mobile", browserSecCHUAMobile)
 	setDefault("sec-ch-ua-platform", browserSecCHUAPlatform)

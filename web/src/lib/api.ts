@@ -251,6 +251,7 @@ type AccountUpdateResponse = {
 
 export type SettingsConfig = {
   proxy: string;
+  impersonate?: string;
   base_url?: string;
   registration_enabled?: boolean;
   refresh_account_interval_minute?: number | string;
