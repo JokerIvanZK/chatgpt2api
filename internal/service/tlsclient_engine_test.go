@@ -2,6 +2,7 @@ package service
 
 import (
 	"net/http"
+	"net/http/httptest"
 	"testing"
 	"time"
 )
@@ -99,5 +100,46 @@ func TestOrderedHeaderNamesDeterministic(t *testing.T) {
 		if order[i] != again[i] {
 			t.Fatalf("顺序不稳定")
 		}
+	}
+}
+
+// 离线集成:同一客户端内 cookie 应跨请求保持(链内连续性)
+func TestTLSClientCookieContinuity(t *testing.T) {
+	var serverURL string
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/set":
+			http.SetCookie(w, &http.Cookie{Name: "chain", Value: "1", Path: "/"})
+			w.WriteHeader(http.StatusNoContent)
+		case "/check":
+			if _, err := r.Cookie("chain"); err != nil {
+				http.Error(w, "missing cookie", http.StatusPreconditionFailed)
+				return
+			}
+			w.WriteHeader(http.StatusNoContent)
+		default:
+			http.Error(w, "not found", http.StatusNotFound)
+		}
+	}))
+	defer server.Close()
+	serverURL = server.URL
+	_ = serverURL
+
+	client, err := tlsClientHTTPClient("", "chrome110", 10*time.Second)
+	if err != nil {
+		t.Fatalf("tlsClientHTTPClient() error = %v", err)
+	}
+	first, err := client.Get(server.URL + "/set")
+	if err != nil {
+		t.Fatalf("/set error = %v", err)
+	}
+	_ = first.Body.Close()
+	second, err := client.Get(server.URL + "/check")
+	if err != nil {
+		t.Fatalf("/check error = %v", err)
+	}
+	defer second.Body.Close()
+	if second.StatusCode != http.StatusNoContent {
+		t.Fatalf("cookie 未在链内保持, status = %d", second.StatusCode)
 	}
 }

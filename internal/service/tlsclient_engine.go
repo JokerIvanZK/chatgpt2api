@@ -61,6 +61,9 @@ func tlsClientHTTPClient(proxy, profile string, timeout time.Duration) (*http.Cl
 	options := []tlsclient.HttpClientOption{
 		tlsclient.WithTimeoutSeconds(int(timeout.Seconds())),
 		tlsclient.WithClientProfile(clientProfile),
+		// 与 surf 的 Session() 对齐:同一条请求链内(bootstrap →
+		// chat-requirements → conversation)保持 cookie 连续性
+		tlsclient.WithCookieJar(tlsclient.NewCookieJar()),
 	}
 	if strings.TrimSpace(proxy) != "" {
 		options = append(options, tlsclient.WithProxyUrl(proxy))
