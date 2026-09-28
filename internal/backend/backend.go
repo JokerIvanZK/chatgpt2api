@@ -95,7 +95,8 @@ func NewClient(accessToken string, lookup AccountLookup, proxy *service.ProxySer
 	c.userAgent = c.fp["user-agent"]
 	c.deviceID = c.fp["oai-device-id"]
 	c.sessionID = c.fp["oai-session-id"]
-	c.httpClient = proxy.BrowserHTTPClientWithProfile(c.fp["impersonate"], 300*time.Second)
+	// 代理按账号身份改写(Resin 粘性池):设备 ID 即身份键,与指纹同生命周期
+	c.httpClient = proxy.BrowserHTTPClientForIdentity(c.fp["impersonate"], c.fp["oai-device-id"], 300*time.Second)
 	return c
 }
 

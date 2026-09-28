@@ -22,6 +22,7 @@ var settingEnvKeys = map[string]string{
 	"base_url":                          "CHATGPT2API_BASE_URL",
 	"proxy":                             "CHATGPT2API_PROXY",
 	"impersonate":                       "CHATGPT2API_IMPERSONATE",
+	"proxy_identity_enabled":            "CHATGPT2API_PROXY_IDENTITY_ENABLED",
 	"fingerprint_pool":                  "CHATGPT2API_FINGERPRINT_POOL",
 	"refresh_account_interval_minute":   "CHATGPT2API_REFRESH_ACCOUNT_INTERVAL_MINUTE",
 	"image_task_timeout_seconds":        "CHATGPT2API_IMAGE_TASK_TIMEOUT_SECONDS",
@@ -301,6 +302,12 @@ func (s *Store) Proxy() string {
 	return strings.TrimSpace(fmt.Sprint(s.settingValue("proxy", "")))
 }
 
+// ProxyIdentityEnabled 表示是否把全局代理的 Basic 用户名按账号身份改写
+// (适配 Resin 类粘性池的 平台.账号:令牌 凭证格式)。
+func (s *Store) ProxyIdentityEnabled() bool {
+	return util.ToBool(s.settingValue("proxy_identity_enabled", false))
+}
+
 // Impersonate 返回全局浏览器伪装配置（surf 的 impersonate profile）。
 // 空值表示未覆盖，实际生效值由 service.DefaultImpersonateProfile 兜底。
 func (s *Store) Impersonate() string {
@@ -472,6 +479,7 @@ func (s *Store) Get() map[string]any {
 	s.mu.RUnlock()
 	delete(data, "image_concurrent_limit")
 	data["impersonate"] = s.Impersonate()
+	data["proxy_identity_enabled"] = s.ProxyIdentityEnabled()
 	data["fingerprint_pool"] = strings.TrimSpace(fmt.Sprint(s.settingValue("fingerprint_pool", "")))
 	data["refresh_account_interval_minute"] = s.RefreshAccountIntervalMinute()
 	data["image_task_timeout_seconds"] = s.ImageTaskTimeoutSeconds()
@@ -547,6 +555,9 @@ func (s *Store) Update(data map[string]any) (map[string]any, error) {
 	}
 	if value, ok := next["impersonate"]; ok {
 		next["impersonate"] = normalizeImpersonate(value)
+	}
+	if value, ok := next["proxy_identity_enabled"]; ok {
+		next["proxy_identity_enabled"] = util.ToBool(value)
 	}
 	if value, ok := next["fingerprint_pool"]; ok {
 		next["fingerprint_pool"] = normalizeFingerprintPool(value)

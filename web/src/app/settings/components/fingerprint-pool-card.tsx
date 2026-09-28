@@ -7,6 +7,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
+import { Checkbox } from "@/components/ui/checkbox";
 import {
   Select,
   SelectContent,
@@ -87,6 +88,7 @@ export function FingerprintPoolCard() {
   const isLoadingConfig = useSettingsStore((state) => state.isLoadingConfig);
   const isSavingConfig = useSettingsStore((state) => state.isSavingConfig);
   const setFingerprintPool = useSettingsStore((state) => state.setFingerprintPool);
+  const setProxyIdentityEnabled = useSettingsStore((state) => state.setProxyIdentityEnabled);
   const saveConfig = useSettingsStore((state) => state.saveConfig);
 
   useEffect(() => {
@@ -312,6 +314,24 @@ export function FingerprintPoolCard() {
                 fingerprint_pool JSON。
               </p>
             </div>
+
+            <label className="flex cursor-pointer items-start gap-3 rounded-xl border border-stone-200 bg-white p-4">
+              <Checkbox
+                id="settings-proxy-identity"
+                checked={config?.proxy_identity_enabled === true}
+                onCheckedChange={(checked) => setProxyIdentityEnabled(checked === true)}
+                className="mt-0.5"
+              />
+              <span className="space-y-1">
+                <span className="block text-sm font-medium text-stone-700">账号独立代理身份（Resin 粘性池）</span>
+                <span className="block text-xs leading-5 text-stone-500">
+                  开启后，访问上游时代理用户名会按账号指纹自动改写为
+                  「用户名.账号标识」，适配 Resin 类粘性池的
+                  「平台.账号:令牌」格式——每个 GPT 账号绑定独立且稳定的出口
+                  IP，指纹轮换时出口 IP 同步更换。普通账号密码代理请勿开启。
+                </span>
+              </span>
+            </label>
 
             <div className="space-y-2 rounded-xl border border-stone-200 p-3">
               <div className="flex items-center justify-between">

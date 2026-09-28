@@ -18,10 +18,11 @@ import (
 )
 
 type testAccountConfig struct {
-	textMode    string
-	imageMode   string
-	fpPool      []map[string]string
-	impersonate string
+	textMode      string
+	imageMode     string
+	fpPool        []map[string]string
+	impersonate   string
+	proxyIdentity bool
 }
 
 func (testAccountConfig) AutoRemoveInvalidAccounts() bool     { return false }
@@ -40,6 +41,7 @@ func (c testAccountConfig) ImageAccountScheduleMode() string {
 }
 func (testAccountConfig) Proxy() string                          { return "" }
 func (c testAccountConfig) Impersonate() string                  { return c.impersonate }
+func (c testAccountConfig) ProxyIdentityEnabled() bool           { return c.proxyIdentity }
 func (c testAccountConfig) FingerprintPool() []map[string]string { return c.fpPool }
 
 func TestFetchRemoteInfoBootstrapsBeforeAccountRefresh(t *testing.T) {
@@ -89,7 +91,7 @@ func TestFetchRemoteInfoBootstrapsBeforeAccountRefresh(t *testing.T) {
 
 	accounts := newTestAccountService(t)
 	accounts.remoteBaseURL = server.URL
-	accounts.browserHTTPClient = func(string, time.Duration) *http.Client {
+	accounts.browserHTTPClient = func(string, string, time.Duration) *http.Client {
 		return server.Client()
 	}
 	accounts.AddAccounts([]string{"token-1"})
@@ -173,7 +175,7 @@ func TestRunUpstreamAccountActionsCallsConfirmedEndpoints(t *testing.T) {
 
 	accounts := newTestAccountService(t)
 	accounts.remoteBaseURL = server.URL
-	accounts.browserHTTPClient = func(string, time.Duration) *http.Client {
+	accounts.browserHTTPClient = func(string, string, time.Duration) *http.Client {
 		return server.Client()
 	}
 	accounts.AddAccounts([]string{"token-1"})
@@ -239,7 +241,7 @@ func TestFetchRemoteInfoSummarizesForbiddenChallenge(t *testing.T) {
 
 	accounts := newTestAccountService(t)
 	accounts.remoteBaseURL = server.URL
-	accounts.browserHTTPClient = func(string, time.Duration) *http.Client {
+	accounts.browserHTTPClient = func(string, string, time.Duration) *http.Client {
 		return server.Client()
 	}
 	accounts.AddAccounts([]string{"token-1"})
@@ -277,7 +279,7 @@ func TestRefreshAccountsReturnsEmptyErrorsArray(t *testing.T) {
 
 	accounts := newTestAccountService(t)
 	accounts.remoteBaseURL = server.URL
-	accounts.browserHTTPClient = func(string, time.Duration) *http.Client {
+	accounts.browserHTTPClient = func(string, string, time.Duration) *http.Client {
 		return server.Client()
 	}
 	accounts.AddAccounts([]string{"token-1"})
@@ -344,7 +346,7 @@ func TestRefreshAccountStateMarksUnauthorizedInitAsInvalid(t *testing.T) {
 
 	accounts := newTestAccountService(t)
 	accounts.remoteBaseURL = server.URL
-	accounts.browserHTTPClient = func(string, time.Duration) *http.Client {
+	accounts.browserHTTPClient = func(string, string, time.Duration) *http.Client {
 		return server.Client()
 	}
 	accounts.AddAccounts([]string{"token-1"})
@@ -634,7 +636,7 @@ func TestRefreshAccountsMarksRateLimitedResponse(t *testing.T) {
 
 	accounts := newTestAccountService(t)
 	accounts.remoteBaseURL = server.URL
-	accounts.browserHTTPClient = func(string, time.Duration) *http.Client {
+	accounts.browserHTTPClient = func(string, string, time.Duration) *http.Client {
 		return server.Client()
 	}
 	accounts.AddAccounts([]string{"token-1"})
@@ -684,7 +686,7 @@ func TestGetAvailableAccessTokenReservesKnownImageQuota(t *testing.T) {
 	}})
 	defer server.Close()
 	accounts.remoteBaseURL = server.URL
-	accounts.browserHTTPClient = func(string, time.Duration) *http.Client {
+	accounts.browserHTTPClient = func(string, string, time.Duration) *http.Client {
 		return server.Client()
 	}
 	accounts.AddAccounts([]string{"token-1"})
@@ -726,7 +728,7 @@ func TestGetAvailableAccessTokenLimitsUnknownImageQuotaToOneInFlight(t *testing.
 	}, nil)
 	defer server.Close()
 	accounts.remoteBaseURL = server.URL
-	accounts.browserHTTPClient = func(string, time.Duration) *http.Client {
+	accounts.browserHTTPClient = func(string, string, time.Duration) *http.Client {
 		return server.Client()
 	}
 	accounts.AddAccounts([]string{"token-1"})
@@ -764,7 +766,7 @@ func TestGetAvailableAccessTokenAllowsFreeUnknownImageQuota(t *testing.T) {
 	}, nil)
 	defer server.Close()
 	accounts.remoteBaseURL = server.URL
-	accounts.browserHTTPClient = func(string, time.Duration) *http.Client {
+	accounts.browserHTTPClient = func(string, string, time.Duration) *http.Client {
 		return server.Client()
 	}
 	accounts.AddAccounts([]string{"free-token"})
@@ -799,7 +801,7 @@ func TestGetAvailableAccessTokenReportsRefreshFailure(t *testing.T) {
 	}))
 	defer server.Close()
 	accounts.remoteBaseURL = server.URL
-	accounts.browserHTTPClient = func(string, time.Duration) *http.Client {
+	accounts.browserHTTPClient = func(string, string, time.Duration) *http.Client {
 		return server.Client()
 	}
 	accounts.AddAccounts([]string{"token-1"})
@@ -816,7 +818,7 @@ func TestGetAvailableAccessTokenReportsRefreshFailure(t *testing.T) {
 
 func TestGetAvailableAccessTokenUsesCachedAccountOnConnectionRefreshFailure(t *testing.T) {
 	accounts := newTestAccountService(t)
-	accounts.browserHTTPClient = func(string, time.Duration) *http.Client {
+	accounts.browserHTTPClient = func(string, string, time.Duration) *http.Client {
 		return &http.Client{
 			Transport: roundTripFunc(func(*http.Request) (*http.Response, error) {
 				return nil, errors.New(`Get "https://chatgpt.com/": surf: HTTP/2 request failed: uTLS.HandshakeContext() error: EOF; HTTP/1.1 fallback failed: uTLS.HandshakeContext() error: EOF`)
@@ -961,7 +963,7 @@ func TestStartLimitedWatcherSkipsAccountBeforeRestoreTime(t *testing.T) {
 
 	accounts := newTestAccountService(t)
 	accounts.remoteBaseURL = server.URL
-	accounts.browserHTTPClient = func(string, time.Duration) *http.Client {
+	accounts.browserHTTPClient = func(string, string, time.Duration) *http.Client {
 		return server.Client()
 	}
 	accounts.AddAccounts([]string{"token-1"})
@@ -1043,7 +1045,7 @@ func TestAccountLeaseBusyTokenBlocksImageWhileTextInFlight(t *testing.T) {
 	}})
 	defer server.Close()
 	accounts.remoteBaseURL = server.URL
-	accounts.browserHTTPClient = func(string, time.Duration) *http.Client { return server.Client() }
+	accounts.browserHTTPClient = func(string, string, time.Duration) *http.Client { return server.Client() }
 	accounts.AddAccounts([]string{"shared-token"})
 	accounts.UpdateAccount("shared-token", map[string]any{"status": "正常", "quota": 5, "type": "Plus"})
 

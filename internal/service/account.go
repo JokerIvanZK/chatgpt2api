@@ -67,7 +67,7 @@ type AccountService struct {
 	busyTokenAliases          map[string]string
 	busyTokenAliasRefs        map[string]int
 	remoteBaseURL             string
-	browserHTTPClient         func(profile string, timeout time.Duration) *http.Client
+	browserHTTPClient         func(profile, identityKey string, timeout time.Duration) *http.Client
 	textRequestCount          map[string]int
 	stickyTextToken           string
 	stickyImageToken          string
@@ -85,11 +85,11 @@ const (
 )
 
 func NewAccountService(backend storage.Backend, config AccountConfig, proxy *ProxyService, logs *LogService) *AccountService {
-	browserHTTPClient := func(profile string, timeout time.Duration) *http.Client {
+	browserHTTPClient := func(profile, identityKey string, timeout time.Duration) *http.Client {
 		if proxy == nil {
 			return &http.Client{Timeout: timeout}
 		}
-		return proxy.BrowserHTTPClientWithProfile(profile, timeout)
+		return proxy.BrowserHTTPClientForIdentity(profile, identityKey, timeout)
 	}
 	s := &AccountService{
 		storage:                   backend,
@@ -109,7 +109,7 @@ func NewAccountService(backend storage.Backend, config AccountConfig, proxy *Pro
 	}
 	// Initialize SessionRefresher with the uTLS client for /api/auth/session.
 	s.refresher = NewSessionRefresher(func(req *http.Request) (*http.Response, error) {
-		client := s.browserHTTPClient(s.proxy.ImpersonateProfile(), refreshTimeout)
+		client := s.browserHTTPClient(s.proxy.ImpersonateProfile(), "", refreshTimeout)
 		if client == nil {
 			client = &http.Client{Timeout: refreshTimeout}
 		}
@@ -1436,7 +1436,11 @@ func (s *AccountService) newRemoteAccountClient(ctx context.Context, accessToken
 		return nil, fmt.Errorf("access_token is required")
 	}
 	baseURL := strings.TrimRight(firstNonEmpty(s.remoteBaseURL, "https://chatgpt.com"), "/")
-	client := s.browserHTTPClient(s.remoteImpersonation(accessToken), timeout)
+	identityKey := ""
+	if binding := s.FingerprintFor(accessToken); binding != nil {
+		identityKey = binding["oai-device-id"]
+	}
+	client := s.browserHTTPClient(s.remoteImpersonation(accessToken), identityKey, timeout)
 	if client == nil {
 		client = &http.Client{Timeout: timeout}
 	}
@@ -2079,6 +2083,14 @@ func (s *AccountService) remoteBootstrapHeaders(accessToken string) map[string]s
 		"sec-fetch-user":            "?1",
 		"upgrade-insecure-requests": "1",
 	}
+}
+
+// ProxyURLWithIdentity 在开启代理身份改写时,把给定代理 URL 按身份键改写。
+func (s *AccountService) ProxyURLWithIdentity(proxyURL, identityKey string) string {
+	if s == nil || s.proxy == nil || !s.proxy.IdentityEnabled() {
+		return proxyURL
+	}
+	return proxyURLForIdentity(proxyURL, identityKey)
 }
 
 func (s *AccountService) remoteImpersonation(accessToken string) string {

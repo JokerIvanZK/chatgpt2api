@@ -195,6 +195,7 @@ type SettingsStore = {
   setProxy: (value: string) => void;
   setImpersonate: (value: string) => void;
   setFingerprintPool: (value: string) => void;
+  setProxyIdentityEnabled: (value: boolean) => void;
   setBaseUrl: (value: string) => void;
   setRegistrationEnabled: (value: boolean) => void;
   setLinuxDoEnabled: (value: boolean) => void;
@@ -492,6 +493,20 @@ export const useSettingsStore = create<SettingsStore>((set, get) => ({
         config: {
           ...state.config,
           fingerprint_pool: value,
+        },
+      };
+    });
+  },
+
+  setProxyIdentityEnabled: (value) => {
+    set((state) => {
+      if (!state.config) {
+        return {};
+      }
+      return {
+        config: {
+          ...state.config,
+          proxy_identity_enabled: value,
         },
       };
     });

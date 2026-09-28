@@ -50,10 +50,14 @@ func indexOf(s, sub string) int {
 	return -1
 }
 
-type fixedProxyConfig struct{ proxy string }
+type fixedProxyConfig struct {
+	proxy    string
+	identity bool
+}
 
 func (c fixedProxyConfig) Proxy() string                      { return c.proxy }
 func (fixedProxyConfig) Impersonate() string                  { return "" }
+func (c fixedProxyConfig) ProxyIdentityEnabled() bool         { return c.identity }
 func (fixedProxyConfig) FingerprintPool() []map[string]string { return nil }
 func (fixedProxyConfig) AutoRemoveInvalidAccounts() bool      { return false }
 func (fixedProxyConfig) AutoRemoveRateLimitedAccounts() bool  { return false }

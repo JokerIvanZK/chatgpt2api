@@ -44,5 +44,6 @@ func TestNewClientOverlaysAccountFingerprint(t *testing.T) {
 
 type fakeProxyConfig struct{}
 
-func (fakeProxyConfig) Proxy() string       { return "" }
-func (fakeProxyConfig) Impersonate() string { return "" }
+func (fakeProxyConfig) Proxy() string              { return "" }
+func (fakeProxyConfig) Impersonate() string        { return "" }
+func (fakeProxyConfig) ProxyIdentityEnabled() bool { return false }

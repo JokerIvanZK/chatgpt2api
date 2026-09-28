@@ -272,7 +272,12 @@ func (s *RegisterService) runWorker(index int, config map[string]any) registerWo
 
 func newRegisterWorker(service *RegisterService, index int, config map[string]any) (*registerWorker, error) {
 	deviceID := util.NewUUID()
-	client, err := registerHTTPClient(util.Clean(config["proxy"]), 60*time.Second, deviceID)
+	registerProxy := util.Clean(config["proxy"])
+	if service != nil && service.accounts != nil {
+		// 注册设备也按身份改写代理(Resin 粘性池),每个注册独立出口身份
+		registerProxy = service.accounts.ProxyURLWithIdentity(registerProxy, deviceID)
+	}
+	client, err := registerHTTPClient(registerProxy, 60*time.Second, deviceID)
 	if err != nil {
 		return nil, err
 	}

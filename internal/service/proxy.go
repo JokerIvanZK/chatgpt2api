@@ -2,8 +2,10 @@ package service
 
 import (
 	"context"
+	"crypto/sha256"
 	"crypto/tls"
 	"encoding/binary"
+	"encoding/hex"
 	"fmt"
 	"io"
 	"net"
@@ -31,6 +33,7 @@ const DefaultImpersonateProfile = "firefox"
 type ProxyConfig interface {
 	Proxy() string
 	Impersonate() string
+	ProxyIdentityEnabled() bool
 }
 
 type ProxyService struct {
@@ -104,6 +107,59 @@ func (s *ProxyService) Test(candidate string, timeout time.Duration) map[string]
 		message = resp.Status
 	}
 	return map[string]any{"ok": ok, "status": resp.StatusCode, "latency_ms": latency, "error": message}
+}
+
+// proxyURLForIdentity 把 Basic 认证代理的用户名改写为 "<原用户名>.<账号标识>",
+// 适配 Resin 类粘性池的 V1 凭证格式(<平台>.<账号>:<令牌>):
+// 平台名保留在原用户名里,账号标识为 identityKey 的 sha256 前 16 位十六进制
+// (不含 '.' 与 ':' 两个分隔符)。无用户信息的代理原样返回。
+func proxyURLForIdentity(proxyURL, identityKey string) string {
+	proxyURL = strings.TrimSpace(proxyURL)
+	if proxyURL == "" || strings.TrimSpace(identityKey) == "" {
+		return proxyURL
+	}
+	parsed, err := url.Parse(proxyURL)
+	if err != nil || parsed.User == nil {
+		return proxyURL
+	}
+	sum := sha256.Sum256([]byte(strings.TrimSpace(identityKey)))
+	account := hex.EncodeToString(sum[:8])
+	username := parsed.User.Username()
+	if password, hasPassword := parsed.User.Password(); hasPassword {
+		parsed.User = url.UserPassword(username+"."+account, password)
+	} else {
+		parsed.User = url.User(username + "." + account)
+	}
+	return parsed.String()
+}
+
+// IdentityEnabled 返回代理身份改写开关(nil 安全)。
+func (s *ProxyService) IdentityEnabled() bool {
+	if s == nil || s.config == nil {
+		return false
+	}
+	return s.config.ProxyIdentityEnabled()
+}
+
+// ProxyForIdentity 返回按账号身份改写后的全局代理;未开启改写或全局代理
+// 不含 Basic 用户信息时原样返回。
+func (s *ProxyService) ProxyForIdentity(identityKey string) string {
+	if s == nil || s.config == nil {
+		return ""
+	}
+	global := strings.TrimSpace(s.config.Proxy())
+	if !s.IdentityEnabled() {
+		return global
+	}
+	return proxyURLForIdentity(global, identityKey)
+}
+
+// BrowserHTTPClientForIdentity 以账号身份代理 + 指定伪装构建浏览器客户端。
+func (s *ProxyService) BrowserHTTPClientForIdentity(profile, identityKey string, timeout time.Duration) *http.Client {
+	if s == nil || s.config == nil {
+		return browserHTTPClientForProfile("", profile, timeout)
+	}
+	return browserHTTPClientForProfile(s.ProxyForIdentity(identityKey), profile, timeout)
 }
 
 // resolveProxyCandidate 空候选回落全局代理(全局也为空则允许直连)。

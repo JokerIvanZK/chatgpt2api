@@ -31,8 +31,9 @@ type testProtocolImageConfig struct {
 
 type testProtocolProxyConfig struct{}
 
-func (testProtocolProxyConfig) Proxy() string       { return "" }
-func (testProtocolProxyConfig) Impersonate() string { return "" }
+func (testProtocolProxyConfig) Proxy() string              { return "" }
+func (testProtocolProxyConfig) Impersonate() string        { return "" }
+func (testProtocolProxyConfig) ProxyIdentityEnabled() bool { return false }
 
 func (c testProtocolImageConfig) ImagesDir() string {
 	path := filepath.Join(c.root, "images")

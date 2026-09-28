@@ -25,6 +25,7 @@ func (testTextLeaseConfig) TextAccountScheduleMode() string      { return "load_
 func (testTextLeaseConfig) ImageAccountScheduleMode() string     { return "load_balance" }
 func (testTextLeaseConfig) Proxy() string                        { return "" }
 func (testTextLeaseConfig) Impersonate() string                  { return "" }
+func (testTextLeaseConfig) ProxyIdentityEnabled() bool           { return false }
 func (testTextLeaseConfig) FingerprintPool() []map[string]string { return nil }
 
 type testProtocolStorageBackend struct {
