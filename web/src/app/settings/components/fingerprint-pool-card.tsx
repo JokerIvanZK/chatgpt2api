@@ -20,7 +20,19 @@ import { verifyImpersonate, type ImpersonateVerifyResult } from "@/lib/api";
 import { useSettingsStore } from "../store";
 
 // 与后端 fingerprintPool 对齐:实测可通过 Cloudflare 的变体
-const PROFILE_OPTIONS = ["firefox", "mac-firefox", "linux-firefox", "android-firefox", "ios-firefox"];
+const PROFILE_OPTIONS = [
+  "firefox",
+  "mac-firefox",
+  "linux-firefox",
+  "android-firefox",
+  "ios-firefox",
+  "chrome103",
+  "chrome110",
+  "chrome111",
+  "chrome112",
+  "chrome117",
+  "opera91",
+];
 
 type PoolEntry = {
   label: string;
@@ -303,7 +315,7 @@ export function FingerprintPoolCard() {
 
             <div className="space-y-2 rounded-xl border border-stone-200 p-3">
               <div className="flex items-center justify-between">
-                <span className="text-sm font-medium text-stone-700">内置变体可用性</span>
+                <span className="text-sm font-medium text-stone-700">实测变体可用性</span>
                 <Button
                   variant="ghost"
                   size="sm"

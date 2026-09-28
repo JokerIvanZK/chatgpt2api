@@ -106,6 +106,14 @@ func (s *ProxyService) Test(candidate string, timeout time.Duration) map[string]
 	return map[string]any{"ok": ok, "status": resp.StatusCode, "latency_ms": latency, "error": message}
 }
 
+// resolveProxyCandidate 空候选回落全局代理(全局也为空则允许直连)。
+func (s *ProxyService) resolveProxyCandidate(candidate string) string {
+	if strings.TrimSpace(candidate) != "" {
+		return strings.TrimSpace(candidate)
+	}
+	return strings.TrimSpace(s.config.Proxy())
+}
+
 // VerifyImpersonate 用指定伪装 profile 走给定代理请求 chatgpt.com 首页,
 // 实测该指纹当前能否通过 Cloudflare(candidate 为空则用全局代理,也允许
 // 为空串表示直连)。返回结构与 Test 对齐,附带 cf-mitigated 判定。
@@ -113,7 +121,8 @@ func (s *ProxyService) VerifyImpersonate(candidate, profile string, timeout time
 	if profile = strings.TrimSpace(profile); profile == "" {
 		profile = s.ImpersonateProfile()
 	}
-	client := browserHTTPClientForProfile(strings.TrimSpace(candidate), profile, timeout)
+	// 与 Test/handleProxy 一致:未指定代理时回落全局代理,避免裸连导致全军覆没
+	client := browserHTTPClientForProfile(s.resolveProxyCandidate(candidate), profile, timeout)
 	ctx, cancel := context.WithTimeout(context.Background(), timeout)
 	defer cancel()
 	req, _ := http.NewRequestWithContext(ctx, http.MethodGet, "https://chatgpt.com/", nil)
@@ -158,6 +167,12 @@ func browserHTTPClient(proxy string, timeout time.Duration) *http.Client {
 }
 
 func browserHTTPClientForProfile(proxy, profile string, timeout time.Duration) *http.Client {
+	// tls-client 系变体(chrome103..117 / opera91)优先走对应引擎
+	if _, supported := tlsClientProfile(profile); supported {
+		if client, err := tlsClientHTTPClient(proxy, profile, timeout); err == nil {
+			return client
+		}
+	}
 	builder := surf.NewClient().
 		Builder().
 		SecureTLS()

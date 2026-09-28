@@ -1,9 +1,8 @@
 package service
 
 import (
-	"fmt"
+	"net/http"
 	"reflect"
-	"strings"
 	"testing"
 	"time"
 )
@@ -188,9 +187,10 @@ func TestRegisterClientUsesImpersonatedTransport(t *testing.T) {
 	if err != nil {
 		t.Fatalf("registerHTTPClient() error = %v", err)
 	}
-	transportType := fmt.Sprintf("%T", client.Transport)
-	if !strings.Contains(transportType, "TransportAdapter") {
-		t.Fatalf("注册客户端应使用 surf 伪装传输层,实际 %s", transportType)
+	// 注册流量按设备哈希可能落到 surf 或 tls-client 任一引擎,均算伪装成功;
+	// 裸 *http.Transport 才是失败。
+	if _, plain := client.Transport.(*http.Transport); plain || client.Transport == nil {
+		t.Fatalf("注册客户端应使用伪装传输层,实际 %T", client.Transport)
 	}
 	if client.Jar == nil {
 		t.Fatal("注册流程自持的 cookie jar 不应丢失")

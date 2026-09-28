@@ -239,9 +239,10 @@ func (c *Client) buildFingerprint() map[string]string {
 			fp[key] = value
 		}
 	}
+	profile := firstNonEmpty(fp["impersonate"], c.defaultImpersonate())
 	defaults := map[string]string{
-		"user-agent":         browserUserAgent,
-		"impersonate":        c.defaultImpersonate(),
+		"user-agent":         firstNonEmpty(fp["user-agent"], service.ProfileUserAgent(profile), browserUserAgent),
+		"impersonate":        profile,
 		"oai-device-id":      util.NewUUID(),
 		"oai-session-id":     util.NewUUID(),
 		"sec-ch-ua-mobile":   browserSecCHUAMobile,

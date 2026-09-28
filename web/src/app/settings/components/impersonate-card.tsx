@@ -25,6 +25,9 @@ const PRESETS = [
   { value: "linux-firefox", label: "Firefox 148 · Linux" },
   { value: "android-firefox", label: "Firefox 148 · Android" },
   { value: "ios-firefox", label: "Firefox 148 · iOS" },
+  { value: "chrome110", label: "Chrome 110 · Windows" },
+  { value: "chrome117", label: "Chrome 117 · Windows" },
+  { value: "opera91", label: "Opera 91 · Windows" },
 ] as const;
 
 const CUSTOM_OPTION = "__custom__";
