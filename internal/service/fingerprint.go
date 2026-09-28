@@ -12,8 +12,14 @@ import (
 )
 
 // verifiedImpersonateVariants 是实测(2026-09,同一代理下复测)可通过
-// Cloudflare 的 TLS 变体。surf 只提供 Chrome145 与 Firefox148 两族指纹,
-// Chrome145 全系被 CF 拉黑(含写作 edge/safari 的回退),Firefox 族全部通过。
+// Cloudflare 的 TLS 变体。surf 只提供 Chrome145 与 Firefox148 两族指纹。
+//
+// 机制注意:CF 不是按浏览器家族拉黑,而是按具体指纹签名拉黑(被爬虫大量
+// 滥用的预设签名会进挑战名单)。同日实测:curl_cffi 的 chrome110/142/150、
+// edge101、safari170 通过,chrome131/136/145/146、firefox144/147 被挑战;
+// surf 的 chrome145 与 curl_cffi 的 chrome145 同版本且同样被挑战。
+// 名单是动态的——这就是指纹验证接口存在的意义,应定期复测并在变体被拉黑时
+// 更新此列表(需要 surf 升级提供新预设,或更换 HTTP 伪装库)。
 // TLS 指纹无法随机伪造,可用的多样性只有"从实测变体中选"和"设备身份"两个维度。
 var verifiedImpersonateVariants = []string{
 	"firefox",
