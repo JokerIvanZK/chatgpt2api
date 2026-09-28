@@ -2034,10 +2034,17 @@ func (s *AccountService) remoteHeaders(accessToken string) map[string]string {
 		"sec-ch-ua-mobile":   firstNonEmpty(clean("sec-ch-ua-mobile"), "?0"),
 		"sec-ch-ua-platform": firstNonEmpty(clean("sec-ch-ua-platform"), `"Windows"`),
 	}
+	// 设备身份优先用账号手工配置,否则回落到指纹池绑定,
+	// 保证刷新额度与生图流量呈现同一设备。
+	binding := s.FingerprintFor(accessToken)
 	if deviceID := clean("oai-device-id", "oai_device_id"); deviceID != "" {
+		headers["oai-device-id"] = deviceID
+	} else if deviceID := binding["oai-device-id"]; deviceID != "" {
 		headers["oai-device-id"] = deviceID
 	}
 	if sessionID := clean("oai-session-id", "oai_session_id"); sessionID != "" {
+		headers["oai-session-id"] = sessionID
+	} else if sessionID := binding["oai-session-id"]; sessionID != "" {
 		headers["oai-session-id"] = sessionID
 	}
 	return headers

@@ -158,3 +158,25 @@ func TestRemoteImpersonationUsesPoolBinding(t *testing.T) {
 		t.Fatalf("刷新链路应使用池绑定指纹: got=%s want=%s", got, binding["impersonate"])
 	}
 }
+
+func TestRemoteHeadersUsePoolDeviceIdentity(t *testing.T) {
+	s := newTestAccountService(t)
+	token := "tok-remote-headers"
+	s.AddAccounts([]string{token})
+	binding := s.FingerprintFor(token)
+
+	headers := s.remoteHeaders(token)
+	if headers["oai-device-id"] != binding["oai-device-id"] {
+		t.Fatalf("刷新链路应使用池绑定的 device-id: got=%s want=%s", headers["oai-device-id"], binding["oai-device-id"])
+	}
+	if headers["oai-session-id"] != binding["oai-session-id"] {
+		t.Fatalf("刷新链路应使用池绑定的 session-id: got=%s want=%s", headers["oai-session-id"], binding["oai-session-id"])
+	}
+
+	// 手工配置仍然优先
+	s.UpdateAccount(token, map[string]any{"fp": map[string]any{"oai-device-id": "manual-dev", "impersonate": "ios-firefox"}})
+	headers = s.remoteHeaders(token)
+	if headers["oai-device-id"] != "manual-dev" {
+		t.Fatalf("手工配置应优先: got=%s", headers["oai-device-id"])
+	}
+}
