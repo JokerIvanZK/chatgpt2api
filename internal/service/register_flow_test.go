@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/base64"
 	"encoding/json"
+	"fmt"
 	"io"
 	"net/http"
 	"net/http/cookiejar"
@@ -205,15 +206,15 @@ func TestRegisterHTTPClientUsesSOCKSTransport(t *testing.T) {
 	if err != nil {
 		t.Fatalf("registerHTTPClient() error = %v", err)
 	}
-	transport, ok := client.Transport.(*http.Transport)
-	if !ok {
-		t.Fatalf("transport type = %T", client.Transport)
+	transportType := fmt.Sprintf("%T", client.Transport)
+	if !strings.Contains(transportType, "TransportAdapter") {
+		t.Fatalf("socks5h 注册流量也应使用 surf 伪装传输层,实际 %s", transportType)
 	}
-	if transport.Proxy != nil {
-		t.Fatal("SOCKS register transport should not use http.ProxyURL")
+	if client.Jar == nil {
+		t.Fatal("注册流程 cookie jar 不应丢失")
 	}
-	if transport.DialContext == nil {
-		t.Fatal("SOCKS register transport missing DialContext")
+	if _, err := registerHTTPClient("://bad-url", time.Second, "device-1"); err == nil {
+		t.Fatal("非法代理地址应报错")
 	}
 }
 

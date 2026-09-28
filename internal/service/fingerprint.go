@@ -82,6 +82,10 @@ func (s *AccountService) FingerprintFor(accessToken string) map[string]string {
 	if manual := s.manualFingerprintLocked(token); manual != nil {
 		return manual
 	}
+	// 账号不存在时不分配绑定,避免制造孤儿记录(加载时的回收只是兜底)
+	if s.findIndexLocked(token) < 0 {
+		return nil
+	}
 	if entry, ok := s.fingerprints[token]; ok && time.Since(entry.AssignedAt) < fingerprintStickyTTL {
 		return entry.fpMap()
 	}
@@ -204,6 +208,19 @@ func (s *AccountService) ensureFingerprintsLoadedLocked() {
 	}
 	if payload.Items != nil {
 		s.fingerprints = payload.Items
+	}
+	// 账号删除时绑定不即时清理,这里在加载时按现存账号做一次回收
+	live := make(map[string]fingerprintEntry, len(s.fingerprints))
+	for _, item := range s.items {
+		if token := util.Clean(item["access_token"]); token != "" {
+			if entry, ok := s.fingerprints[token]; ok {
+				live[token] = entry
+			}
+		}
+	}
+	if len(live) != len(s.fingerprints) {
+		s.fingerprints = live
+		s.saveFingerprintsLocked()
 	}
 }
 

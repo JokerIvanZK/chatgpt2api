@@ -872,6 +872,9 @@ func normalizeAccountScheduleMode(value any) string {
 // profile 的语义由 surf 的匹配规则决定（含 firefox/android/ios/mac/linux 等关键字），
 // 需要支持自定义值，因此保持宽松。
 func normalizeImpersonate(value any) string {
+	if value == nil {
+		return ""
+	}
 	text := strings.TrimSpace(fmt.Sprint(value))
 	if len(text) > 64 {
 		return text[:64]

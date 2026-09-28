@@ -291,7 +291,6 @@ func registerHTTPClient(proxy string, timeout time.Duration, deviceID string) (*
 	if err != nil {
 		return nil, err
 	}
-	transport := transportForProxy("")
 	if strings.TrimSpace(proxy) != "" {
 		parsed, parseErr := url.Parse(proxy)
 		if parseErr != nil {
@@ -300,9 +299,12 @@ func registerHTTPClient(proxy string, timeout time.Duration, deviceID string) (*
 		if parsed.Host == "" {
 			return nil, fmt.Errorf("invalid proxy url")
 		}
-		transport = transportForProxyURL(parsed)
 	}
-	client := &http.Client{Timeout: timeout, Transport: transport, Jar: jar}
+	// 注册流量同样要走浏览器伪装传输层(裸 Go TLS 必被识别);
+	// profile 按设备哈希在指纹池中分散,cookie jar 仍由注册流程自持。
+	profile := fingerprintPool[fingerprintInitialIndex(deviceID)%len(fingerprintPool)]
+	impersonated := browserHTTPClientForProfile(proxy, profile, timeout)
+	client := &http.Client{Timeout: timeout, Transport: impersonated.Transport, Jar: jar}
 	authURL, _ := url.Parse(registerAuthBase)
 	if authURL != nil {
 		jar.SetCookies(authURL, []*http.Cookie{

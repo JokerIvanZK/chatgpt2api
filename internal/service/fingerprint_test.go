@@ -1,7 +1,9 @@
 package service
 
 import (
+	"fmt"
 	"reflect"
+	"strings"
 	"testing"
 	"time"
 )
@@ -178,5 +180,52 @@ func TestRemoteHeadersUsePoolDeviceIdentity(t *testing.T) {
 	headers = s.remoteHeaders(token)
 	if headers["oai-device-id"] != "manual-dev" {
 		t.Fatalf("手工配置应优先: got=%s", headers["oai-device-id"])
+	}
+}
+
+func TestRegisterClientUsesImpersonatedTransport(t *testing.T) {
+	client, err := registerHTTPClient("", 5*time.Second, "reg-device-1")
+	if err != nil {
+		t.Fatalf("registerHTTPClient() error = %v", err)
+	}
+	transportType := fmt.Sprintf("%T", client.Transport)
+	if !strings.Contains(transportType, "TransportAdapter") {
+		t.Fatalf("注册客户端应使用 surf 伪装传输层,实际 %s", transportType)
+	}
+	if client.Jar == nil {
+		t.Fatal("注册流程自持的 cookie jar 不应丢失")
+	}
+}
+
+func TestFingerprintOrphansReclaimedOnLoad(t *testing.T) {
+	backend := newTestStorageBackend(t)
+	cfg := testAccountConfig{}
+	s1 := NewAccountService(backend, cfg, NewProxyService(cfg), NewLogService(backend))
+	token := "tok-orphan"
+	s1.AddAccounts([]string{token})
+	first := s1.FingerprintFor(token)
+	if first == nil {
+		t.Fatal("正常账号应能分配绑定")
+	}
+	s1.DeleteAccounts([]string{token})
+
+	s2 := NewAccountService(backend, cfg, NewProxyService(cfg), NewLogService(backend))
+	s2.mu.Lock()
+	s2.ensureFingerprintsLoadedLocked()
+	_, orphaned := s2.fingerprints[token]
+	s2.mu.Unlock()
+	if orphaned {
+		t.Fatal("已删账号的绑定应在加载时被回收")
+	}
+
+	// 源头防护:不存在的账号不应被分配绑定
+	if fp := s2.FingerprintFor("tok-not-exist"); fp != nil {
+		t.Fatal("不存在的账号不应返回指纹")
+	}
+	s2.mu.Lock()
+	_, created := s2.fingerprints["tok-not-exist"]
+	s2.mu.Unlock()
+	if created {
+		t.Fatal("不存在的账号不应产生绑定记录")
 	}
 }
