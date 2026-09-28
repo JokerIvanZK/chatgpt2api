@@ -93,6 +93,13 @@ export function FingerprintPoolCard() {
     setFingerprintPool(next.length > 0 ? JSON.stringify(next) : "");
   };
 
+  // 添加条目并自动逐条验证新增部分
+  const addEntries = (list: PoolEntry[]) => {
+    const start = current.length;
+    persist([...current, ...list]);
+    void runVerifyAll(list.map((item, i) => ({ key: `entry-${start + i}`, profile: item.impersonate })));
+  };
+
   const handleSave = async () => {
     await saveConfig();
   };
@@ -151,8 +158,8 @@ export function FingerprintPoolCard() {
             <div>
               <h2 className="text-lg font-semibold tracking-tight">指纹池</h2>
               <p className="text-sm text-stone-500">
-                账号按哈希绑定池中条目，7 天粘性，命中挑战自动换下一个。留空使用内置的 5
-                个实测可用变体（每账号独立设备 ID）。
+                账号按哈希绑定池中条目，7 天粘性，命中挑战自动换下一个。留空时系统自动生成
+                20 个内置身份（5 个实测变体 × 独立设备身份，每部署唯一）并在首次使用时持久化。
               </p>
             </div>
           </div>
@@ -203,7 +210,7 @@ export function FingerprintPoolCard() {
               </div>
             ) : (
               <p className="rounded-xl border border-dashed border-stone-200 px-4 py-3 text-sm text-stone-500">
-                当前使用内置池。添加条目后账号将改为绑定这些条目：共享同一条目的账号会共享设备身份。
+                当前使用自动生成的 20 个内置身份。添加自定义条目后账号将改为绑定这些条目：共享同一条目的账号会共享设备身份。
               </p>
             )}
 
@@ -226,7 +233,7 @@ export function FingerprintPoolCard() {
               <Button
                 variant="outline"
                 className="h-10 rounded-xl border-stone-200 bg-white px-4 text-stone-700"
-                onClick={() => persist([...current, makeRandomEntry(nextSeq)])}
+                onClick={() => addEntries([makeRandomEntry(nextSeq)])}
               >
                 <Dices className="size-4" />
                 随机生成一条
@@ -244,7 +251,7 @@ export function FingerprintPoolCard() {
                   onClick={() => {
                     const count = Math.min(100, Math.max(1, Number(batchCount) || 1));
                     const add = Array.from({ length: count }, (_, i) => makeRandomEntry(nextSeq + i));
-                    persist([...current, ...add]);
+                    addEntries(add);
                   }}
                 >
                   <Dices className="size-4" />
@@ -276,8 +283,7 @@ export function FingerprintPoolCard() {
                 variant="outline"
                 className="h-10 rounded-xl border-stone-200 bg-white px-4 text-stone-700"
                 onClick={() => {
-                  persist([
-                    ...current,
+                  addEntries([
                     {
                       label: manualLabel.trim() || `手动 ${current.length + 1}`,
                       impersonate: manualProfile,
@@ -330,7 +336,7 @@ export function FingerprintPoolCard() {
                 ))}
               </div>
               <p className="text-xs text-stone-400">
-                验证会走当前全局代理请求 chatgpt.com 首页，返回 200 表示该指纹当前可通过 Cloudflare。
+                验证走当前全局代理请求 chatgpt.com 首页，返回 200 表示该指纹当前可通过 Cloudflare；随机/批量/手动添加的条目会自动逐条验证并在列表中显示结果。
               </p>
             </div>
 

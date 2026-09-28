@@ -47,7 +47,7 @@ func TestFingerprintRotatesOnFailure(t *testing.T) {
 
 	s.ReportFingerprintFailure(token)
 	next := s.FingerprintFor(token)
-	want := fingerprintPool[(fingerprintPoolIndex(first["impersonate"])+1)%len(fingerprintPool)]
+	want := verifiedImpersonateVariants[(fingerprintPoolIndex(first["impersonate"])+1)%len(verifiedImpersonateVariants)]
 	if next["impersonate"] != want {
 		t.Fatalf("失败后应轮换到下一个: first=%s got=%s want=%s", first["impersonate"], next["impersonate"], want)
 	}
@@ -69,7 +69,7 @@ func TestFingerprintRotatesAfterTTL(t *testing.T) {
 	s.mu.Unlock()
 
 	next := s.FingerprintFor(token)
-	want := fingerprintPool[(fingerprintPoolIndex(first["impersonate"])+1)%len(fingerprintPool)]
+	want := verifiedImpersonateVariants[(fingerprintPoolIndex(first["impersonate"])+1)%len(verifiedImpersonateVariants)]
 	if next["impersonate"] != want {
 		t.Fatalf("过期后应轮换: got=%s want=%s", next["impersonate"], want)
 	}
@@ -227,5 +227,67 @@ func TestFingerprintOrphansReclaimedOnLoad(t *testing.T) {
 	s2.mu.Unlock()
 	if created {
 		t.Fatal("不存在的账号不应产生绑定记录")
+	}
+}
+
+func TestSeedPoolTwentyIdentities(t *testing.T) {
+	s := newTestAccountService(t)
+	token := "tok-seed-1"
+	s.AddAccounts([]string{token})
+	got := s.FingerprintFor(token)
+
+	s.mu.Lock()
+	seed := append([]poolIdentity(nil), s.seedPool...)
+	s.mu.Unlock()
+	if len(seed) != fingerprintSeedCount {
+		t.Fatalf("内置池应生成 %d 个身份,实际 %d", fingerprintSeedCount, len(seed))
+	}
+	variants := map[string]bool{}
+	for i, identity := range seed {
+		if identity.DeviceID == "" || identity.SessionID == "" {
+			t.Fatalf("内置身份 %d 缺少设备身份", i+1)
+		}
+		variants[identity.Impersonate] = true
+	}
+	if len(variants) != len(verifiedImpersonateVariants) {
+		t.Fatalf("内置池应覆盖全部 %d 个实测变体,实际 %d", len(verifiedImpersonateVariants), len(variants))
+	}
+	// 绑定应精确来自种子身份
+	want := seed[fingerprintInitialIndex(token)%len(seed)]
+	if got["impersonate"] != want.Impersonate || got["oai-device-id"] != want.DeviceID {
+		t.Fatalf("绑定应来自种子身份: got=%v want=%v", got, want)
+	}
+}
+
+func TestSeedPoolPersistedAcrossRestart(t *testing.T) {
+	backend := newTestStorageBackend(t)
+	cfg := testAccountConfig{}
+	s1 := NewAccountService(backend, cfg, NewProxyService(cfg), NewLogService(backend))
+	tok1 := "tok-seed-r1"
+	s1.AddAccounts([]string{tok1})
+	s1.FingerprintFor(tok1)
+	s1.mu.Lock()
+	seed1 := append([]poolIdentity(nil), s1.seedPool...)
+	s1.mu.Unlock()
+
+	s2 := NewAccountService(backend, cfg, NewProxyService(cfg), NewLogService(backend))
+	tok2 := "tok-seed-r2"
+	s2.AddAccounts([]string{tok2})
+	got := s2.FingerprintFor(tok2)
+	s2.mu.Lock()
+	seed2 := s2.seedPool
+	s2.mu.Unlock()
+
+	if len(seed1) == 0 || len(seed2) != len(seed1) {
+		t.Fatalf("种子池应跨重启持久: %d vs %d", len(seed1), len(seed2))
+	}
+	for i := range seed1 {
+		if seed1[i] != seed2[i] {
+			t.Fatalf("种子身份 %d 重启后发生变化", i+1)
+		}
+	}
+	want := seed2[fingerprintInitialIndex(tok2)%len(seed2)]
+	if got["oai-device-id"] != want.DeviceID {
+		t.Fatalf("重启后新账号应使用持久化的种子身份")
 	}
 }

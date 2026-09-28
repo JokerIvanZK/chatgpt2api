@@ -76,6 +76,7 @@ type AccountService struct {
 	refresher                 *SessionRefresher
 	fingerprints              map[string]fingerprintEntry
 	fingerprintsLoaded        bool
+	seedPool                  []poolIdentity
 }
 
 const (

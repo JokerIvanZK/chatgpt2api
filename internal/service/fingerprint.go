@@ -3,6 +3,7 @@ package service
 import (
 	"crypto/sha256"
 	"encoding/json"
+	"fmt"
 	"strings"
 	"time"
 
@@ -10,10 +11,11 @@ import (
 	"chatgpt2api/internal/util"
 )
 
-// fingerprintPool 是实测(2026-09,同一代理)可通过 Cloudflare 的伪装变体。
-// 账号首次使用时按 token 哈希落位,之后失败或到期都顺序轮换到下一个;
-// 多个账号共享同一 TLS 变体是预期行为,设备 ID 则每账号唯一。
-var fingerprintPool = []string{
+// verifiedImpersonateVariants 是实测(2026-09,同一代理下复测)可通过
+// Cloudflare 的 TLS 变体。surf 只提供 Chrome145 与 Firefox148 两族指纹,
+// Chrome145 全系被 CF 拉黑(含写作 edge/safari 的回退),Firefox 族全部通过。
+// TLS 指纹无法随机伪造,可用的多样性只有"从实测变体中选"和"设备身份"两个维度。
+var verifiedImpersonateVariants = []string{
 	"firefox",
 	"mac-firefox",
 	"linux-firefox",
@@ -25,8 +27,23 @@ const (
 	// fingerprintStickyTTL 是指纹的粘性时长;到期后下次使用自动轮换。
 	fingerprintStickyTTL = 7 * 24 * time.Hour
 	fingerprintDocument  = "account_fingerprints.json"
+	// fingerprintSeedCount 是内置指纹池的身份数量:
+	// 实测变体 × 各自独立的设备身份,首次使用时随机生成并持久化
+	// (每个部署不同,避免跨部署共享设备 ID)。
+	fingerprintSeedCount = 20
 )
 
+// poolIdentity 是指纹池的一个身份:TLS 变体 + 设备身份。
+// 绑定到同一身份的账号对上游呈现为同一台设备;DeviceID/SessionID
+// 为空表示该身份不共享设备(绑定时为每个账号独立生成)。
+type poolIdentity struct {
+	Label       string `json:"label"`
+	Impersonate string `json:"impersonate"`
+	DeviceID    string `json:"oai-device-id"`
+	SessionID   string `json:"oai-session-id"`
+}
+
+// fingerprintEntry 是账号与池身份的绑定记录。
 type fingerprintEntry struct {
 	Impersonate string    `json:"impersonate"`
 	DeviceID    string    `json:"oai-device-id"`
@@ -45,7 +62,7 @@ func (e fingerprintEntry) fpMap() map[string]string {
 }
 
 func fingerprintPoolIndex(profile string) int {
-	for index, candidate := range fingerprintPool {
+	for index, candidate := range verifiedImpersonateVariants {
 		if candidate == profile {
 			return index
 		}
@@ -60,12 +77,44 @@ func fingerprintInitialIndex(token string) int {
 	return int(sum[0])
 }
 
-// fingerprintPoolSizeLocked 返回当前生效的池大小:自定义池优先,空则用内置池。
-func (s *AccountService) fingerprintPoolSizeLocked() int {
+// activePoolLocked 返回当前生效的指纹池:用户在设置里配置的自定义池优先,
+// 否则用首次生成的内置身份池(fingerprintSeedCount 个)。
+func (s *AccountService) activePoolLocked() []poolIdentity {
 	if custom := s.config.FingerprintPool(); len(custom) > 0 {
-		return len(custom)
+		pool := make([]poolIdentity, 0, len(custom))
+		for _, entry := range custom {
+			if profile := util.Clean(entry["impersonate"]); profile != "" {
+				pool = append(pool, poolIdentity{
+					Label:       util.Clean(entry["label"]),
+					Impersonate: profile,
+					DeviceID:    util.Clean(entry["oai-device-id"]),
+					SessionID:   util.Clean(entry["oai-session-id"]),
+				})
+			}
+		}
+		if len(pool) > 0 {
+			return pool
+		}
 	}
-	return len(fingerprintPool)
+	s.ensureSeedPoolLocked()
+	return s.seedPool
+}
+
+// ensureSeedPoolLocked 生成并持久化内置身份池(每个部署仅一次)。
+func (s *AccountService) ensureSeedPoolLocked() {
+	if len(s.seedPool) > 0 {
+		return
+	}
+	s.seedPool = make([]poolIdentity, 0, fingerprintSeedCount)
+	for i := 0; i < fingerprintSeedCount; i++ {
+		s.seedPool = append(s.seedPool, poolIdentity{
+			Label:       fmt.Sprintf("内置 %02d", i+1),
+			Impersonate: verifiedImpersonateVariants[i%len(verifiedImpersonateVariants)],
+			DeviceID:    util.NewUUID(),
+			SessionID:   util.NewUUID(),
+		})
+	}
+	s.saveFingerprintsLocked()
 }
 
 // FingerprintFor 返回账号绑定的指纹:命中且未过期(7 天)直接复用;
@@ -98,7 +147,7 @@ func (s *AccountService) FingerprintFor(accessToken string) map[string]string {
 }
 
 // ReportFingerprintFailure 在指纹不可用(如命中 Cloudflare 挑战)时舍弃粘性,
-// 立即换池中下一个变体并生成新设备 ID。
+// 立即换池中下一个身份。
 func (s *AccountService) ReportFingerprintFailure(accessToken string) {
 	token := util.Clean(accessToken)
 	if token == "" {
@@ -141,23 +190,30 @@ func (s *AccountService) manualFingerprintLocked(token string) map[string]string
 	return out
 }
 
-// assignFingerprintLocked 把 token 绑定到池中第 poolIndex 个指纹(按池大小取模)。
-// 自定义池条目自带设备身份(共享条目=共享设备身份),留空则生成新 UUID;
-// 内置池始终生成每账号唯一的设备 ID。
+// globalImpersonateLocked 返回设置里明确选择的全局伪装;空表示未选择,按池分配。
+func (s *AccountService) globalImpersonateLocked() string {
+	if s.proxy == nil || s.proxy.config == nil {
+		return ""
+	}
+	return strings.TrimSpace(s.proxy.config.Impersonate())
+}
+
+// assignFingerprintLocked 把 token 绑定到池中第 poolIndex 个身份(按池大小取模)。
+// 身份自带设备身份则直接共享;为空则生成每账号唯一的 UUID。
 func (s *AccountService) assignFingerprintLocked(token string, poolIndex int) {
-	size := s.fingerprintPoolSizeLocked()
+	pool := s.activePoolLocked()
+	size := len(pool)
 	if size == 0 {
 		size = 1
 	}
 	index := ((poolIndex % size) + size) % size
-	entry := fingerprintEntry{AssignedAt: time.Now(), PoolIndex: index}
-	if custom := s.config.FingerprintPool(); len(custom) > 0 {
-		source := custom[index]
-		entry.Impersonate = util.Clean(source["impersonate"])
-		entry.DeviceID = util.Clean(source["oai-device-id"])
-		entry.SessionID = util.Clean(source["oai-session-id"])
-	} else {
-		entry.Impersonate = fingerprintPool[index]
+	identity := pool[index]
+	entry := fingerprintEntry{
+		Impersonate: identity.Impersonate,
+		DeviceID:    identity.DeviceID,
+		SessionID:   identity.SessionID,
+		AssignedAt:  time.Now(),
+		PoolIndex:   index,
 	}
 	if entry.DeviceID == "" {
 		entry.DeviceID = util.NewUUID()
@@ -174,20 +230,13 @@ func (s *AccountService) assignFingerprintLocked(token string, poolIndex int) {
 	s.saveFingerprintsLocked()
 }
 
-// globalImpersonateLocked 返回设置里明确选择的全局伪装;空表示未选择,按池分配。
-func (s *AccountService) globalImpersonateLocked() string {
-	if s.proxy == nil || s.proxy.config == nil {
-		return ""
-	}
-	return strings.TrimSpace(s.proxy.config.Impersonate())
-}
-
 func (s *AccountService) ensureFingerprintsLoadedLocked() {
 	if s.fingerprintsLoaded {
 		return
 	}
 	s.fingerprintsLoaded = true
 	s.fingerprints = map[string]fingerprintEntry{}
+	s.seedPool = nil
 	docBackend, ok := s.storage.(storage.JSONDocumentBackend)
 	if !ok {
 		return
@@ -202,6 +251,7 @@ func (s *AccountService) ensureFingerprintsLoadedLocked() {
 	}
 	var payload struct {
 		Items map[string]fingerprintEntry `json:"items"`
+		Seed  []poolIdentity              `json:"seed"`
 	}
 	if err := json.Unmarshal(encoded, &payload); err != nil {
 		return
@@ -209,6 +259,7 @@ func (s *AccountService) ensureFingerprintsLoadedLocked() {
 	if payload.Items != nil {
 		s.fingerprints = payload.Items
 	}
+	s.seedPool = payload.Seed
 	// 账号删除时绑定不即时清理,这里在加载时按现存账号做一次回收
 	live := make(map[string]fingerprintEntry, len(s.fingerprints))
 	for _, item := range s.items {
@@ -229,7 +280,10 @@ func (s *AccountService) saveFingerprintsLocked() {
 	if !ok {
 		return
 	}
-	_ = docBackend.SaveJSONDocument(fingerprintDocument, map[string]any{"items": s.fingerprints})
+	_ = docBackend.SaveJSONDocument(fingerprintDocument, map[string]any{
+		"items": s.fingerprints,
+		"seed":  s.seedPool,
+	})
 }
 
 // isCloudflareChallengeErrorMessage 判断错误文本是否为 Cloudflare 挑战

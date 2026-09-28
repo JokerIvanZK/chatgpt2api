@@ -302,7 +302,7 @@ func registerHTTPClient(proxy string, timeout time.Duration, deviceID string) (*
 	}
 	// 注册流量同样要走浏览器伪装传输层(裸 Go TLS 必被识别);
 	// profile 按设备哈希在指纹池中分散,cookie jar 仍由注册流程自持。
-	profile := fingerprintPool[fingerprintInitialIndex(deviceID)%len(fingerprintPool)]
+	profile := verifiedImpersonateVariants[fingerprintInitialIndex(deviceID)%len(verifiedImpersonateVariants)]
 	impersonated := browserHTTPClientForProfile(proxy, profile, timeout)
 	client := &http.Client{Timeout: timeout, Transport: impersonated.Transport, Jar: jar}
 	authURL, _ := url.Parse(registerAuthBase)
