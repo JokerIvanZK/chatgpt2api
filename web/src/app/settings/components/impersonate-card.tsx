@@ -77,8 +77,8 @@ export function ImpersonateCard() {
             <div>
               <h2 className="text-lg font-semibold tracking-tight">浏览器伪装</h2>
               <p className="text-sm text-stone-500">
-                访问 chatgpt.com 使用的 TLS/浏览器指纹，保存后立即生效。Chrome 系指纹已被
-                Cloudflare 识别，请优先使用 Firefox 系。
+                每个账号默认由指纹池自动分配并保持粘性（7 天有效，命中 Cloudflare
+                挑战自动换下一个）；此处的全局值仅作为无账号场景（如代理测试）的兜底。
               </p>
             </div>
           </div>
@@ -134,8 +134,8 @@ export function ImpersonateCard() {
                 </div>
               ) : (
                 <p className="text-sm text-stone-500">
-                  下拉里的预置项均已实测可通过 Cloudflare；也可以选「自定义…」填入其他
-                  profile。单个账号在 fp 里单独指定的值优先于这里的全局设置。
+                  指纹池从下列实测可用的变体中按账号哈希分配。选择某个具体变体可以让所有账号固定使用它；
+                  也可以选「自定义…」填入其他 profile。单个账号在 fp 里手工指定的值优先级最高。
                 </p>
               )}
             </div>

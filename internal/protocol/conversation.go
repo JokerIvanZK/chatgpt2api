@@ -754,7 +754,11 @@ func (e *Engine) runSingleImageOutput(ctx context.Context, out chan<- ImageOutpu
 			}
 			if !emittedForToken && isCloudflareChallengeErrorMessage(result.lastError) && challengeSwitches < maxCloudflareChallengeSwitches {
 				challengeSwitches++
-				// 挑战与账号无关，清空 preferredToken 让下一轮从账号池另取账号
+				// 当前指纹已被识别,舍弃粘性换下一个;挑战与账号无关,
+				// 同时清空 preferredToken 让下一轮从账号池另取账号
+				if e.Accounts != nil {
+					e.Accounts.ReportFingerprintFailure(token)
+				}
 				preferredToken = ""
 				return true
 			}

@@ -72,6 +72,8 @@ type AccountService struct {
 	textCooldownUntil         time.Time
 	random                    *rand.Rand
 	refresher                 *SessionRefresher
+	fingerprints              map[string]fingerprintEntry
+	fingerprintsLoaded        bool
 }
 
 const (
@@ -640,6 +642,10 @@ func (s *AccountService) refreshAccountViaSessionAsync(accessToken, sessionToken
 
 		newAccessToken, newSessionToken, newExpires, err := s.refresher.RefreshToken(ctx, accessToken, sessionToken)
 		if err != nil {
+			if isCloudflareChallengeErrorMessage(err.Error()) {
+				// 刷新也撞上挑战说明当前指纹已不可用,轮换后再等下次刷新
+				s.ReportFingerprintFailure(accessToken)
+			}
 			s.UpdateAccount(accessToken, map[string]any{"status": "异常"})
 			return
 		}

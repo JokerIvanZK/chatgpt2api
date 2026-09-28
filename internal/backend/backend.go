@@ -41,6 +41,12 @@ type AccountLookup interface {
 	GetAccount(accessToken string) map[string]any
 }
 
+// FingerprintProvider 由账号服务实现:按账号分配粘性指纹(7 天 TTL,
+// 遇 Cloudflare 挑战自动轮换)。实现方负责持久化。
+type FingerprintProvider interface {
+	FingerprintFor(accessToken string) map[string]string
+}
+
 type Client struct {
 	BaseURL           string
 	ClientVersion     string
@@ -77,6 +83,15 @@ func NewClient(accessToken string, lookup AccountLookup, proxy *service.ProxySer
 	}
 	c.fp = c.buildFingerprint()
 	c.applyBrowserFingerprint()
+	if c.AccessToken != "" {
+		if provider, ok := c.lookup.(FingerprintProvider); ok {
+			for key, value := range provider.FingerprintFor(c.AccessToken) {
+				if text := util.Clean(value); text != "" {
+					c.fp[strings.ToLower(key)] = text
+				}
+			}
+		}
+	}
 	c.userAgent = c.fp["user-agent"]
 	c.deviceID = c.fp["oai-device-id"]
 	c.sessionID = c.fp["oai-session-id"]
