@@ -143,7 +143,7 @@ func TestTextModelDoesNotForceImageChatRoute(t *testing.T) {
 
 func TestWithTextLeaseReleasesOnSuccess(t *testing.T) {
 	engine, accounts := newTextLeaseTestEngine(t, "token-1")
-	if err := engine.withTextLease(context.Background(), nil, func(_ *backend.Client, lease service.AccountLease) error {
+	if err := engine.withTextLease(context.Background(), nil, "", func(_ *backend.Client, lease service.AccountLease) error {
 		if lease.Token != "token-1" {
 			t.Fatalf("lease token = %q, want token-1", lease.Token)
 		}
@@ -164,7 +164,7 @@ func TestWithTextLeaseReleasesOnSuccess(t *testing.T) {
 func TestWithTextLeaseReleasesOnError(t *testing.T) {
 	engine, accounts := newTextLeaseTestEngine(t, "token-1")
 	wantErr := errors.New("boom")
-	if err := engine.withTextLease(context.Background(), nil, func(_ *backend.Client, lease service.AccountLease) error {
+	if err := engine.withTextLease(context.Background(), nil, "", func(_ *backend.Client, lease service.AccountLease) error {
 		if lease.Token != "token-1" {
 			t.Fatalf("lease token = %q, want token-1", lease.Token)
 		}
@@ -186,7 +186,7 @@ func TestWithTextLeaseReleasesOnCanceledContext(t *testing.T) {
 	engine, accounts := newTextLeaseTestEngine(t, "token-1")
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
-	if err := engine.withTextLease(context.Background(), nil, func(_ *backend.Client, lease service.AccountLease) error {
+	if err := engine.withTextLease(context.Background(), nil, "", func(_ *backend.Client, lease service.AccountLease) error {
 		if ctx.Err() == nil {
 			t.Fatal("expected canceled context")
 		}
@@ -210,7 +210,7 @@ func TestTextLeaseRetrySkipsExpiredTokenAndReleasesEachAttempt(t *testing.T) {
 	accounts.UpdateAccount("token-2", map[string]any{"session_token": "session-2"})
 	exhaustedTokens := map[string]struct{}{}
 	var firstToken string
-	if err := engine.withTextLease(context.Background(), exhaustedTokens, func(_ *backend.Client, lease service.AccountLease) error {
+	if err := engine.withTextLease(context.Background(), exhaustedTokens, "", func(_ *backend.Client, lease service.AccountLease) error {
 		firstToken = lease.Token
 		if !engine.handleTextAccountErrorForRetry(lease.Token, errors.New("authentication token is expired"), exhaustedTokens, true) {
 			t.Fatalf("handleTextAccountErrorForRetry() = false, want true")

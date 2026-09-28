@@ -219,11 +219,11 @@ func StreamImageChunks(outputs <-chan ImageOutput) <-chan map[string]any {
 	return out
 }
 
-func (e *Engine) withTextLease(ctx context.Context, exhaustedTokens map[string]struct{}, fn func(*backend.Client, service.AccountLease) error) error {
+func (e *Engine) withTextLease(ctx context.Context, exhaustedTokens map[string]struct{}, preferredToken string, fn func(*backend.Client, service.AccountLease) error) error {
 	if e == nil || e.Accounts == nil {
 		return fmt.Errorf("no account service configured")
 	}
-	lease, err := e.Accounts.AcquireTextAccessToken(exhaustedTokens)
+	lease, err := e.Accounts.AcquireTextAccessTokenFor(exhaustedTokens, preferredToken)
 	if err != nil {
 		return err
 	}
@@ -267,11 +267,12 @@ func (e *Engine) streamTextDeltasWithTokenRetry(ctx context.Context, request Con
 		defer close(out)
 		defer close(errOut)
 		exhaustedTokens := map[string]struct{}{}
+		preferredToken := ""
 		var lastErr error
 		for attempt := 0; attempt < service.MaxTokenSwitchAttempts; attempt++ {
 			retry := false
 			completed := false
-			err := e.withTextLease(ctx, exhaustedTokens, func(client *backend.Client, lease service.AccountLease) error {
+			err := e.withTextLease(ctx, exhaustedTokens, preferredToken, func(client *backend.Client, lease service.AccountLease) error {
 				deltas, upstreamErr := streamTextDeltasForTokenRetry(ctx, e, client, request)
 				sent := false
 				for {
@@ -314,6 +315,11 @@ func (e *Engine) streamTextDeltasWithTokenRetry(ctx context.Context, request Con
 					completed = true
 					return nil
 				}
+				if _, exhausted := exhaustedTokens[lease.Token]; !exhausted {
+					preferredToken = lease.Token
+				} else {
+					preferredToken = ""
+				}
 				retry = true
 				return nil
 			})
@@ -348,12 +354,13 @@ func (e *Engine) collectTextWithTokenRetry(ctx context.Context, request Conversa
 
 func (e *Engine) collectVisionTextWithTokenRetry(ctx context.Context, messages []map[string]any, model string, images []backend.VisionImage) (string, error) {
 	exhaustedTokens := map[string]struct{}{}
+	preferredToken := ""
 	var lastErr error
 	for attempt := 0; attempt < service.MaxTokenSwitchAttempts; attempt++ {
 		var text string
 		retry := false
 		succeeded := false
-		err := e.withTextLease(ctx, exhaustedTokens, func(client *backend.Client, lease service.AccountLease) error {
+		err := e.withTextLease(ctx, exhaustedTokens, preferredToken, func(client *backend.Client, lease service.AccountLease) error {
 			var collectErr error
 			text, collectErr = e.CollectVisionText(ctx, client, messages, model, images)
 			if collectErr == nil {
@@ -363,6 +370,11 @@ func (e *Engine) collectVisionTextWithTokenRetry(ctx context.Context, messages [
 			lastErr = collectErr
 			if !e.handleTextAccountErrorForRetry(lease.Token, collectErr, exhaustedTokens, true) {
 				return collectErr
+			}
+			if _, exhausted := exhaustedTokens[lease.Token]; !exhausted {
+				preferredToken = lease.Token
+			} else {
+				preferredToken = ""
 			}
 			retry = true
 			return nil
@@ -393,11 +405,12 @@ func (e *Engine) streamVisionDeltasWithTokenRetry(ctx context.Context, messages 
 		defer close(out)
 		defer close(errOut)
 		exhaustedTokens := map[string]struct{}{}
+		preferredToken := ""
 		var lastErr error
 		for attempt := 0; attempt < service.MaxTokenSwitchAttempts; attempt++ {
 			retry := false
 			completed := false
-			err := e.withTextLease(ctx, exhaustedTokens, func(client *backend.Client, lease service.AccountLease) error {
+			err := e.withTextLease(ctx, exhaustedTokens, preferredToken, func(client *backend.Client, lease service.AccountLease) error {
 				deltas, upstreamErr := client.StreamMultimodalConversation(ctx, messages, model, images)
 				sent := false
 				for {
@@ -439,6 +452,11 @@ func (e *Engine) streamVisionDeltasWithTokenRetry(ctx context.Context, messages 
 					errOut <- err
 					completed = true
 					return nil
+				}
+				if _, exhausted := exhaustedTokens[lease.Token]; !exhausted {
+					preferredToken = lease.Token
+				} else {
+					preferredToken = ""
 				}
 				retry = true
 				return nil

@@ -291,3 +291,43 @@ func TestSeedPoolPersistedAcrossRestart(t *testing.T) {
 		t.Fatalf("重启后新账号应使用持久化的种子身份")
 	}
 }
+
+func TestAcquireTextAccessTokenForPrefersSameToken(t *testing.T) {
+	s := newTestAccountService(t)
+	tokens := []string{"tok-pref-a", "tok-pref-b"}
+	s.AddAccounts(tokens)
+
+	// 先给 tok-pref-a 绑定指纹(模拟使用过)
+	binding := s.FingerprintFor("tok-pref-a")
+	if binding == nil {
+		t.Fatal("tok-pref-a 应能分配绑定")
+	}
+
+	// 用 preferredToken 获取:应优先返回 tok-pref-a
+	lease, err := s.AcquireTextAccessTokenFor(map[string]struct{}{}, "tok-pref-a")
+	if err != nil {
+		t.Fatalf("AcquireTextAccessTokenFor() error = %v", err)
+	}
+	lease.Release()
+	if lease.Token != "tok-pref-a" {
+		t.Fatalf("preferredToken 应被优先选中: got %s, want tok-pref-a", lease.Token)
+	}
+
+	// preferredToken 已耗尽时应退回常规调度
+	exhausted := map[string]struct{}{"tok-pref-a": {}}
+	lease2, err := s.AcquireTextAccessTokenFor(exhausted, "tok-pref-a")
+	if err != nil {
+		t.Fatalf("exhausted preferred 退回正常: %v", err)
+	}
+	lease2.Release()
+	if lease2.Token == "tok-pref-a" {
+		t.Fatal("已排除的 preferredToken 不应被选中")
+	}
+
+	// 空 preferredToken 走常规调度
+	lease3, err := s.AcquireTextAccessTokenFor(map[string]struct{}{}, "")
+	if err != nil {
+		t.Fatal("空 preferred 应正常工作")
+	}
+	lease3.Release()
+}

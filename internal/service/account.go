@@ -594,6 +594,26 @@ func (s *AccountService) GetTextAccessTokenWithRetry(exhaustedTokens map[string]
 	return lease.Token, true
 }
 
+// AcquireTextAccessTokenFor 优先尝试 preferredToken(可用且未排除时),
+// 否则退回常规调度。文字对话的指纹轮换依赖此方法保证同号重试。
+func (s *AccountService) AcquireTextAccessTokenFor(exhaustedTokens map[string]struct{}, preferredToken string) (AccountLease, error) {
+	preferredToken = util.Clean(preferredToken)
+	if preferredToken != "" {
+		if _, skip := exhaustedTokens[preferredToken]; !skip {
+			s.mu.Lock()
+			idx := s.findIndexLocked(preferredToken)
+			if idx >= 0 && isAccountAvailableForScheduling(s.items[idx]) {
+				s.textRequestCount[preferredToken]++
+				lease := s.occupyTokenLocked(preferredToken)
+				s.mu.Unlock()
+				return lease, nil
+			}
+			s.mu.Unlock()
+		}
+	}
+	return s.AcquireTextAccessToken(exhaustedTokens)
+}
+
 func (s *AccountService) AcquireTextAccessToken(exhaustedTokens map[string]struct{}) (AccountLease, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
