@@ -645,8 +645,9 @@ func (s *AccountService) refreshAccountViaSessionAsync(accessToken, sessionToken
 
 		newAccessToken, newSessionToken, newExpires, err := s.refresher.RefreshToken(ctx, accessToken, sessionToken)
 		if err != nil {
-			if isCloudflareChallengeErrorMessage(err.Error()) {
-				// 刷新也撞上挑战说明当前指纹已不可用,轮换后再等下次刷新
+			if isCloudflareChallengeErrorMessage(err.Error()) || util.IsProxyUpstreamFailure(err.Error()) {
+				// 撞上挑战或代理层硬失败(坏节点)都说明当前身份的出口
+				// 已不可用,轮换后再等下次刷新
 				s.ReportFingerprintFailure(accessToken)
 			}
 			s.UpdateAccount(accessToken, map[string]any{"status": "异常"})

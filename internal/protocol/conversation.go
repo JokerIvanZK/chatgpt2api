@@ -249,6 +249,10 @@ const maxTransientImageStreamAttempts = 3
 // 首次尝试 + 最多 3 次换号，共 4 次，对齐 yukkcat 的 image_max_account_attempts 默认值 4。
 const maxCloudflareChallengeSwitches = 3
 
+// 代理层硬失败(如 Resin 504)说明该身份绑定的出口节点已坏,
+// 轮换身份换新租约并换账号重试。
+const maxProxyFailureSwitches = 3
+
 func isTransientImageStreamErrorMessage(message string) bool {
 	lower := strings.ToLower(strings.TrimSpace(message))
 	if lower == "" {
@@ -592,6 +596,7 @@ func (e *Engine) runSingleImageOutput(ctx context.Context, out chan<- ImageOutpu
 	result := imageRunResult{}
 	transientAttempts := 0
 	challengeSwitches := 0
+	proxyFailureSwitches := 0
 	session, hasSession := e.activeImageConversationSession(request)
 	preferredToken := ""
 	if hasSession {
@@ -756,6 +761,16 @@ func (e *Engine) runSingleImageOutput(ctx context.Context, out chan<- ImageOutpu
 				challengeSwitches++
 				// 当前指纹已被识别,舍弃粘性换下一个;挑战与账号无关,
 				// 同时清空 preferredToken 让下一轮从账号池另取账号
+				if e.Accounts != nil {
+					e.Accounts.ReportFingerprintFailure(token)
+				}
+				preferredToken = ""
+				return true
+			}
+			if !emittedForToken && util.IsProxyUpstreamFailure(result.lastError) && proxyFailureSwitches < maxProxyFailureSwitches {
+				proxyFailureSwitches++
+				// 该身份粘性租约绑定的出口节点已不可用:轮换指纹(新哈希
+				// 换新租约)并换账号,避免原地反复撞同一个坏节点
 				if e.Accounts != nil {
 					e.Accounts.ReportFingerprintFailure(token)
 				}
