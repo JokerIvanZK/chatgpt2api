@@ -88,3 +88,29 @@ func TestBrowserHTTPClientPreservesCallerAuthHeaders(t *testing.T) {
 		t.Fatalf("status = %d", resp.StatusCode)
 	}
 }
+
+// 回归：surf 的浏览器模板默认把 accept-language 强制为 en-US，
+// 与请求里的 OAI-Language: zh-CN 自相矛盾；builder 层必须覆盖回配置值。
+func TestBrowserHTTPClientSendsConfiguredAcceptLanguage(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if got := r.Header.Get("Accept-Language"); got != browserAcceptLanguage {
+			t.Fatalf("Accept-Language = %q, want %q", got, browserAcceptLanguage)
+		}
+		w.WriteHeader(http.StatusNoContent)
+	}))
+	defer server.Close()
+
+	client := browserHTTPClientForProfile("", "chrome145", 5*time.Second)
+	req, err := http.NewRequest(http.MethodGet, server.URL, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	resp, err := client.Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusNoContent {
+		t.Fatalf("status = %d", resp.StatusCode)
+	}
+}

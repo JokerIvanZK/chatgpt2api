@@ -2469,8 +2469,7 @@ func summarizeRefreshErrorBody(body []byte) string {
 	lower := strings.ToLower(text)
 	if strings.Contains(lower, "cf_chl") ||
 		strings.Contains(lower, "challenge-platform") ||
-		strings.Contains(lower, "enable javascript and cookies to continue") ||
-		strings.Contains(lower, "cloudflare") {
+		strings.Contains(lower, "enable javascript and cookies to continue") {
 		return "upstream returned Cloudflare challenge page; refresh browser fingerprint/session or change proxy"
 	}
 	if strings.Contains(lower, "<html") || strings.Contains(lower, "<!doctype html") || strings.Contains(lower, "<body") {

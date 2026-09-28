@@ -554,6 +554,30 @@ func TestImageStreamErrorMessage(t *testing.T) {
 	}
 }
 
+func TestIsCloudflareChallengeErrorMessage(t *testing.T) {
+	positive := []string{
+		"/backend-api/f/conversation failed: status=403, upstream returned Cloudflare challenge page; refresh browser fingerprint/session or change proxy",
+		"auth_chat_requirements failed: status=403, body=<script>challenge-platform</script>",
+	}
+	for _, input := range positive {
+		if !isCloudflareChallengeErrorMessage(input) {
+			t.Fatalf("isCloudflareChallengeErrorMessage(%q) = false, want true", input)
+		}
+	}
+
+	// 仅含 "cloudflare" 字样的边缘错误页（如 cloudflare-ray-id）不应被判定为挑战
+	negative := []string{
+		"upstream failed: status=429, body=<html>cloudflare-ray-id: 8f3a</html>",
+		"upstream returned 500",
+		"",
+	}
+	for _, input := range negative {
+		if isCloudflareChallengeErrorMessage(input) {
+			t.Fatalf("isCloudflareChallengeErrorMessage(%q) = true, want false", input)
+		}
+	}
+}
+
 func TestHandleImageGenerationsReturnsUpstreamTextResponse(t *testing.T) {
 	engine := &Engine{
 		ImageTokenProvider: func(context.Context) (string, error) { return "test-token", nil },

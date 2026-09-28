@@ -925,8 +925,7 @@ func summarizeUpstreamErrorBody(body []byte) string {
 func isCloudflareChallengeBody(lower string) bool {
 	return strings.Contains(lower, "cf_chl") ||
 		strings.Contains(lower, "challenge-platform") ||
-		strings.Contains(lower, "enable javascript and cookies to continue") ||
-		strings.Contains(lower, "cloudflare")
+		strings.Contains(lower, "enable javascript and cookies to continue")
 }
 
 func looksLikeHTMLBody(lower string) bool {

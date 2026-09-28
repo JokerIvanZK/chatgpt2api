@@ -19,6 +19,10 @@ import (
 	"github.com/enetx/surf"
 )
 
+// 与 backend.go 请求头里的 Accept-Language 保持一致；请求级的设置会被 surf
+// 的浏览器模板覆盖，只有 builder 层的值能真正到达线缆。
+const browserAcceptLanguage = "zh-CN,zh;q=0.9,en;q=0.8,en-US;q=0.7"
+
 type ProxyConfig interface {
 	Proxy() string
 }
@@ -92,7 +96,10 @@ func browserHTTPClientForProfile(proxy, profile string, timeout time.Duration) *
 	builder := surf.NewClient().
 		Builder().
 		SecureTLS()
+	// surf 的浏览器模板会把请求里已设置的 accept-language 强制覆盖为 en-US，
+	// 与 OAI-Language: zh-CN 自相矛盾；请求级设置拦不住，只能在 builder 层覆盖。
 	builder = applyBrowserProfile(builder, profile).
+		SetHeaders(map[string]string{"accept-language": browserAcceptLanguage}).
 		Session().
 		Timeout(timeout)
 

@@ -245,6 +245,10 @@ func NewImageGenerationError(message string) *ImageGenerationError {
 
 const maxTransientImageStreamAttempts = 3
 
+// Cloudflare 挑战与账号本身无关（指纹/出口维度的问题），换账号重试。
+// 首次尝试 + 最多 3 次换号，共 4 次，对齐 yukkcat 的 image_max_account_attempts 默认值 4。
+const maxCloudflareChallengeSwitches = 3
+
 func isTransientImageStreamErrorMessage(message string) bool {
 	lower := strings.ToLower(strings.TrimSpace(message))
 	if lower == "" {
@@ -275,13 +279,22 @@ func isTransientImageStreamErrorMessage(message string) bool {
 	return false
 }
 
+func isCloudflareChallengeText(lower string) bool {
+	return strings.Contains(lower, "cf_chl") ||
+		strings.Contains(lower, "challenge-platform") ||
+		strings.Contains(lower, "enable javascript and cookies to continue") ||
+		strings.Contains(lower, "cloudflare challenge")
+}
+
+func isCloudflareChallengeErrorMessage(message string) bool {
+	lower := strings.ToLower(strings.TrimSpace(message))
+	return lower != "" && isCloudflareChallengeText(lower)
+}
+
 func imageStreamErrorMessage(message string) string {
 	text := strings.TrimSpace(message)
 	lower := strings.ToLower(text)
-	if strings.Contains(lower, "cf_chl") ||
-		strings.Contains(lower, "challenge-platform") ||
-		strings.Contains(lower, "enable javascript and cookies to continue") ||
-		strings.Contains(lower, "cloudflare challenge") {
+	if isCloudflareChallengeText(lower) {
 		return "upstream returned Cloudflare challenge page; refresh browser fingerprint/session or change proxy"
 	}
 	if detail, ok := util.SummarizeUpstreamConnectionError(text); ok {
@@ -578,6 +591,7 @@ func noopImageOutputSlotRelease() {}
 func (e *Engine) runSingleImageOutput(ctx context.Context, out chan<- ImageOutput, request ConversationRequest, index int) imageRunResult {
 	result := imageRunResult{}
 	transientAttempts := 0
+	challengeSwitches := 0
 	session, hasSession := e.activeImageConversationSession(request)
 	preferredToken := ""
 	if hasSession {
@@ -736,6 +750,12 @@ func (e *Engine) runSingleImageOutput(ctx context.Context, out chan<- ImageOutpu
 				}
 			}
 			if !emittedForToken && IsTokenInvalidError(result.lastError) {
+				return true
+			}
+			if !emittedForToken && isCloudflareChallengeErrorMessage(result.lastError) && challengeSwitches < maxCloudflareChallengeSwitches {
+				challengeSwitches++
+				// 挑战与账号无关，清空 preferredToken 让下一轮从账号池另取账号
+				preferredToken = ""
 				return true
 			}
 			if !returnedResult && isTransientImageStreamErrorMessage(result.lastError) && transientAttempts < maxTransientImageStreamAttempts {
