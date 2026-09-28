@@ -1,6 +1,7 @@
 package service
 
 import (
+	"bytes"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -145,5 +146,34 @@ func TestTLSClientCookieContinuity(t *testing.T) {
 	defer second.Body.Close()
 	if second.StatusCode != http.StatusNoContent {
 		t.Fatalf("cookie 未在链内保持, status = %d", second.StatusCode)
+	}
+}
+
+// 回归:适配器必须保留 Content-Length,不得退化为 Transfer-Encoding: chunked
+// (Azure Blob 等后端对 chunked 上传返回 400 UnsupportedHeader)。
+func TestTLSClientAdapterPreservesContentLength(t *testing.T) {
+	var sawContentLength int64
+	var sawTransferEncoding string
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		sawContentLength = r.ContentLength
+		sawTransferEncoding = r.Header.Get("Transfer-Encoding")
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer server.Close()
+
+	client, err := tlsClientHTTPClient("", "chrome110", 10*time.Second)
+	if err != nil {
+		t.Fatalf("tlsClientHTTPClient() error = %v", err)
+	}
+	resp, err := client.Post(server.URL+"/upload", "application/octet-stream", bytes.NewReader([]byte("hello-upload")))
+	if err != nil {
+		t.Fatalf("POST error = %v", err)
+	}
+	_ = resp.Body.Close()
+	if sawContentLength != int64(len("hello-upload")) {
+		t.Fatalf("服务端 ContentLength = %d, want %d", sawContentLength, len("hello-upload"))
+	}
+	if sawTransferEncoding != "" {
+		t.Fatalf("不应出现 Transfer-Encoding: %q", sawTransferEncoding)
 	}
 }

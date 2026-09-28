@@ -142,6 +142,14 @@ func (t *tlsClientRoundTripper) RoundTrip(req *http.Request) (*http.Response, er
 	if err != nil {
 		return nil, err
 	}
+	// 关键:透传 Content-Length。fhttp.NewRequest 拿到 io.ReadCloser 时视为
+	// 未知长度,会退化为 Transfer-Encoding: chunked;Azure Blob 等严格后端
+	// 直接拒绝该头(图片上传 400 UnsupportedHeader)。
+	fReq.ContentLength = req.ContentLength
+	fReq.TransferEncoding = req.TransferEncoding
+	if req.Host != "" {
+		fReq.Host = req.Host
+	}
 	fReq.Header[fhttp.HeaderOrderKey] = orderedHeaderNames(req.Header)
 	for _, name := range orderedHeaderNames(req.Header) {
 		for _, value := range req.Header[name] {
