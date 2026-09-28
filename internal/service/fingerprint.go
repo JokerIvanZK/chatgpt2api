@@ -32,6 +32,8 @@ type fingerprintEntry struct {
 	DeviceID    string    `json:"oai-device-id"`
 	SessionID   string    `json:"oai-session-id"`
 	AssignedAt  time.Time `json:"assigned_at"`
+	// PoolIndex 记录分配时在池中的位置,失败/到期轮换时顺延一位。
+	PoolIndex int `json:"pool_index"`
 }
 
 func (e fingerprintEntry) fpMap() map[string]string {
@@ -52,9 +54,18 @@ func fingerprintPoolIndex(profile string) int {
 }
 
 // fingerprintInitialIndex 用 token 哈希决定初始落位,让账号天然分散在池中。
+// 不做取模,由 assignFingerprintLocked 按当前池大小归一。
 func fingerprintInitialIndex(token string) int {
 	sum := sha256.Sum256([]byte(token))
-	return int(sum[0]) % len(fingerprintPool)
+	return int(sum[0])
+}
+
+// fingerprintPoolSizeLocked 返回当前生效的池大小:自定义池优先,空则用内置池。
+func (s *AccountService) fingerprintPoolSizeLocked() int {
+	if custom := s.config.FingerprintPool(); len(custom) > 0 {
+		return len(custom)
+	}
+	return len(fingerprintPool)
 }
 
 // FingerprintFor 返回账号绑定的指纹:命中且未过期(7 天)直接复用;
@@ -76,7 +87,7 @@ func (s *AccountService) FingerprintFor(accessToken string) map[string]string {
 	}
 	next := fingerprintInitialIndex(token)
 	if entry, ok := s.fingerprints[token]; ok {
-		next = fingerprintPoolIndex(entry.Impersonate) + 1
+		next = entry.PoolIndex + 1
 	}
 	s.assignFingerprintLocked(token, next)
 	return s.fingerprints[token].fpMap()
@@ -99,7 +110,7 @@ func (s *AccountService) ReportFingerprintFailure(accessToken string) {
 	if !ok {
 		return
 	}
-	s.assignFingerprintLocked(token, fingerprintPoolIndex(entry.Impersonate)+1)
+	s.assignFingerprintLocked(token, entry.PoolIndex+1)
 	s.logs.Add("轮换账号指纹", map[string]any{
 		"module": "accounts",
 		"token":  util.AnonymizeToken(token),
@@ -126,14 +137,31 @@ func (s *AccountService) manualFingerprintLocked(token string) map[string]string
 	return out
 }
 
+// assignFingerprintLocked 把 token 绑定到池中第 poolIndex 个指纹(按池大小取模)。
+// 自定义池条目自带设备身份(共享条目=共享设备身份),留空则生成新 UUID;
+// 内置池始终生成每账号唯一的设备 ID。
 func (s *AccountService) assignFingerprintLocked(token string, poolIndex int) {
-	profile := fingerprintPool[poolIndex%len(fingerprintPool)]
-	s.fingerprints[token] = fingerprintEntry{
-		Impersonate: profile,
-		DeviceID:    util.NewUUID(),
-		SessionID:   util.NewUUID(),
-		AssignedAt:  time.Now(),
+	size := s.fingerprintPoolSizeLocked()
+	if size == 0 {
+		size = 1
 	}
+	index := ((poolIndex % size) + size) % size
+	entry := fingerprintEntry{AssignedAt: time.Now(), PoolIndex: index}
+	if custom := s.config.FingerprintPool(); len(custom) > 0 {
+		source := custom[index]
+		entry.Impersonate = util.Clean(source["impersonate"])
+		entry.DeviceID = util.Clean(source["oai-device-id"])
+		entry.SessionID = util.Clean(source["oai-session-id"])
+	} else {
+		entry.Impersonate = fingerprintPool[index]
+	}
+	if entry.DeviceID == "" {
+		entry.DeviceID = util.NewUUID()
+	}
+	if entry.SessionID == "" {
+		entry.SessionID = util.NewUUID()
+	}
+	s.fingerprints[token] = entry
 	s.saveFingerprintsLocked()
 }
 

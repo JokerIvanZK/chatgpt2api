@@ -19,12 +19,13 @@ func ptrInt(value int) *int {
 
 type testTextLeaseConfig struct{}
 
-func (testTextLeaseConfig) AutoRemoveInvalidAccounts() bool     { return false }
-func (testTextLeaseConfig) AutoRemoveRateLimitedAccounts() bool { return false }
-func (testTextLeaseConfig) TextAccountScheduleMode() string     { return "load_balance" }
-func (testTextLeaseConfig) ImageAccountScheduleMode() string    { return "load_balance" }
-func (testTextLeaseConfig) Proxy() string                       { return "" }
-func (testTextLeaseConfig) Impersonate() string                 { return "" }
+func (testTextLeaseConfig) AutoRemoveInvalidAccounts() bool      { return false }
+func (testTextLeaseConfig) AutoRemoveRateLimitedAccounts() bool  { return false }
+func (testTextLeaseConfig) TextAccountScheduleMode() string      { return "load_balance" }
+func (testTextLeaseConfig) ImageAccountScheduleMode() string     { return "load_balance" }
+func (testTextLeaseConfig) Proxy() string                        { return "" }
+func (testTextLeaseConfig) Impersonate() string                  { return "" }
+func (testTextLeaseConfig) FingerprintPool() []map[string]string { return nil }
 
 type testProtocolStorageBackend struct {
 	accounts []map[string]any

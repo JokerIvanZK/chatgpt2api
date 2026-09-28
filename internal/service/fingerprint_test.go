@@ -99,3 +99,38 @@ func TestFingerprintInitialIndexSpreads(t *testing.T) {
 		t.Fatalf("初始哈希落位应分散,实际只覆盖 %d 个变体", len(seen))
 	}
 }
+
+func TestFingerprintCustomPoolEntry(t *testing.T) {
+	backend := newTestStorageBackend(t)
+	cfg := testAccountConfig{fpPool: []map[string]string{
+		{"impersonate": "mac-firefox", "oai-device-id": "pool-dev-1", "oai-session-id": "pool-sess-1"},
+		{"impersonate": "linux-firefox"},
+	}}
+	s := NewAccountService(backend, cfg, NewProxyService(cfg), NewLogService(backend))
+	token := "tok-custom-pool"
+	s.AddAccounts([]string{token})
+
+	first := s.FingerprintFor(token)
+	if first["impersonate"] != "mac-firefox" && first["impersonate"] != "linux-firefox" {
+		t.Fatalf("应落在自定义池条目上: %v", first)
+	}
+	if first["impersonate"] == "mac-firefox" {
+		if first["oai-device-id"] != "pool-dev-1" || first["oai-session-id"] != "pool-sess-1" {
+			t.Fatalf("自带设备身份的条目应原样使用: %v", first)
+		}
+	} else if first["oai-device-id"] == "" {
+		t.Fatal("缺省设备身份的条目应自动生成")
+	}
+
+	// 失败轮换在两个条目间循环
+	s.ReportFingerprintFailure(token)
+	second := s.FingerprintFor(token)
+	if second["impersonate"] == first["impersonate"] {
+		t.Fatalf("应轮换到另一条目: %v", second)
+	}
+	s.ReportFingerprintFailure(token)
+	third := s.FingerprintFor(token)
+	if third["impersonate"] != first["impersonate"] {
+		t.Fatal("两条目应循环轮换")
+	}
+}

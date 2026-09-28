@@ -12,6 +12,7 @@ import { CPAPoolsCard } from "./components/cpa-pools-card";
 import { ImageStorageGovernanceCard } from "./components/image-storage-governance-card";
 import { ImportBrowserDialog } from "./components/import-browser-dialog";
 import { ImpersonateCard } from "./components/impersonate-card";
+import { FingerprintPoolCard } from "./components/fingerprint-pool-card";
 import { LinuxDoLoginCard } from "./components/linuxdo-login-card";
 import { LogGovernanceCard } from "./components/log-governance-card";
 import { LoginPageImageCard } from "./components/login-page-image-card";
@@ -74,6 +75,9 @@ function AdminSettingsPageContent({
         </SettingsMasonryItem>
         <SettingsMasonryItem>
           <ImpersonateCard />
+        </SettingsMasonryItem>
+        <SettingsMasonryItem>
+          <FingerprintPoolCard />
         </SettingsMasonryItem>
         <SettingsMasonryItem>
           <LogGovernanceCard />

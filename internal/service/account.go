@@ -37,6 +37,8 @@ type AccountConfig interface {
 	AutoRemoveRateLimitedAccounts() bool
 	TextAccountScheduleMode() string
 	ImageAccountScheduleMode() string
+	// FingerprintPool 返回用户自定义指纹池;nil/空表示使用内置变体。
+	FingerprintPool() []map[string]string
 }
 
 type AccountLease struct {

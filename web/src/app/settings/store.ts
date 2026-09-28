@@ -194,6 +194,7 @@ type SettingsStore = {
   setLogLevel: (level: string, enabled: boolean) => void;
   setProxy: (value: string) => void;
   setImpersonate: (value: string) => void;
+  setFingerprintPool: (value: string) => void;
   setBaseUrl: (value: string) => void;
   setRegistrationEnabled: (value: boolean) => void;
   setLinuxDoEnabled: (value: boolean) => void;
@@ -477,6 +478,20 @@ export const useSettingsStore = create<SettingsStore>((set, get) => ({
         config: {
           ...state.config,
           impersonate: value,
+        },
+      };
+    });
+  },
+
+  setFingerprintPool: (value) => {
+    set((state) => {
+      if (!state.config) {
+        return {};
+      }
+      return {
+        config: {
+          ...state.config,
+          fingerprint_pool: value,
         },
       };
     });

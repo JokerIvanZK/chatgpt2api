@@ -22,6 +22,7 @@ var settingEnvKeys = map[string]string{
 	"base_url":                          "CHATGPT2API_BASE_URL",
 	"proxy":                             "CHATGPT2API_PROXY",
 	"impersonate":                       "CHATGPT2API_IMPERSONATE",
+	"fingerprint_pool":                  "CHATGPT2API_FINGERPRINT_POOL",
 	"refresh_account_interval_minute":   "CHATGPT2API_REFRESH_ACCOUNT_INTERVAL_MINUTE",
 	"image_task_timeout_seconds":        "CHATGPT2API_IMAGE_TASK_TIMEOUT_SECONDS",
 	"user_default_concurrent_limit":     "CHATGPT2API_USER_DEFAULT_CONCURRENT_LIMIT",
@@ -306,6 +307,34 @@ func (s *Store) Impersonate() string {
 	return strings.TrimSpace(fmt.Sprint(s.settingValue("impersonate", "")))
 }
 
+// FingerprintPool 解析用户自定义指纹池（设置里存的是 JSON 字符串）。
+// 空或解析失败返回 nil，表示使用内置的 5 个实测可用变体。
+func (s *Store) FingerprintPool() []map[string]string {
+	raw := strings.TrimSpace(fmt.Sprint(s.settingValue("fingerprint_pool", "")))
+	if raw == "" {
+		return nil
+	}
+	var entries []map[string]string
+	if err := json.Unmarshal([]byte(raw), &entries); err != nil {
+		return nil
+	}
+	return filterFingerprintEntries(entries)
+}
+
+func filterFingerprintEntries(entries []map[string]string) []map[string]string {
+	out := make([]map[string]string, 0, len(entries))
+	for _, entry := range entries {
+		if strings.TrimSpace(entry["impersonate"]) == "" {
+			continue
+		}
+		out = append(out, entry)
+	}
+	if len(out) == 0 {
+		return nil
+	}
+	return out
+}
+
 func (s *Store) UpdateProxyURL() string {
 	if value := strings.TrimSpace(os.Getenv("CHATGPT2API_UPDATE_PROXY_URL")); value != "" {
 		return value
@@ -517,6 +546,9 @@ func (s *Store) Update(data map[string]any) (map[string]any, error) {
 	}
 	if value, ok := next["impersonate"]; ok {
 		next["impersonate"] = normalizeImpersonate(value)
+	}
+	if value, ok := next["fingerprint_pool"]; ok {
+		next["fingerprint_pool"] = normalizeFingerprintPool(value)
 	}
 	if value, ok := next["default_billing_type"]; ok {
 		next["default_billing_type"] = normalizeDefaultBillingType(value)
@@ -844,6 +876,43 @@ func normalizeImpersonate(value any) string {
 		return text[:64]
 	}
 	return text
+}
+
+// normalizeFingerprintPool 把指纹池统一成紧凑 JSON 字符串（env 文件按字符串持久化）。
+// 接受 JSON 字符串或数组；没有合法条目时归一为空串（回落到内置池）。
+func normalizeFingerprintPool(value any) string {
+	var entries []map[string]string
+	switch v := value.(type) {
+	case string:
+		raw := strings.TrimSpace(v)
+		if raw == "" {
+			return ""
+		}
+		if err := json.Unmarshal([]byte(raw), &entries); err != nil {
+			return ""
+		}
+	case []any:
+		encoded, err := json.Marshal(v)
+		if err != nil {
+			return ""
+		}
+		if err := json.Unmarshal(encoded, &entries); err != nil {
+			return ""
+		}
+	case []map[string]string:
+		entries = v
+	default:
+		return ""
+	}
+	filtered := filterFingerprintEntries(entries)
+	if len(filtered) == 0 {
+		return ""
+	}
+	encoded, err := json.Marshal(filtered)
+	if err != nil {
+		return ""
+	}
+	return string(encoded)
 }
 
 func normalizeNonNegativeInt(value any) int {
