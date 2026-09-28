@@ -331,3 +331,49 @@ func TestAcquireTextAccessTokenForPrefersSameToken(t *testing.T) {
 	}
 	lease3.Release()
 }
+
+func TestFingerprintBindingMigratesOnTokenRenewal(t *testing.T) {
+	s := newTestAccountService(t)
+	oldToken := "tok-old-access"
+	s.AddAccounts([]string{oldToken})
+	binding := s.FingerprintFor(oldToken)
+	if binding == nil {
+		t.Fatal("旧 token 应能分配绑定")
+	}
+
+	// 模拟 token 续签:更新账号并迁移绑定
+	newToken := "tok-new-access"
+	s.RefreshAccountViaSession(oldToken, newToken, "sess-1", "2026-10-05")
+
+	migrated := s.FingerprintFor(newToken)
+	if migrated == nil {
+		t.Fatal("新 token 应继承旧绑定")
+	}
+	if migrated["oai-device-id"] != binding["oai-device-id"] {
+		t.Fatalf("设备 ID 应跨 token 不变: old=%s new=%s", binding["oai-device-id"], migrated["oai-device-id"])
+	}
+
+	// 旧 token 的绑定应已迁移(不存在)
+	s.mu.Lock()
+	_, oldExists := s.fingerprints[oldToken]
+	s.mu.Unlock()
+	if oldExists {
+		t.Fatal("旧 token 绑定应已迁移")
+	}
+}
+
+func TestFindTokenBySessionToken(t *testing.T) {
+	s := newTestAccountService(t)
+	s.AddAccounts([]string{"tok-lookup"})
+	s.UpdateAccount("tok-lookup", map[string]any{"session_token": "sess-abc-123"})
+
+	if got := s.findTokenBySessionToken("sess-abc-123"); got != "tok-lookup" {
+		t.Fatalf("session_token 反查: got %q, want tok-lookup", got)
+	}
+	if got := s.findTokenBySessionToken("nonexistent"); got != "" {
+		t.Fatalf("不存在的 session_token 应返回空: got %q", got)
+	}
+	if got := s.findTokenBySessionToken(""); got != "" {
+		t.Fatal("空 session_token 应返回空")
+	}
+}

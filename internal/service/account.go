@@ -108,8 +108,25 @@ func NewAccountService(backend storage.Backend, config AccountConfig, proxy *Pro
 		random:                    rand.New(rand.NewSource(time.Now().UnixNano())),
 	}
 	// Initialize SessionRefresher with the uTLS client for /api/auth/session.
+	// 从续签请求的 session cookie 反查账号,用该账号的池绑定指纹和代理身份,
+	// 保证续签流量与生图/对话/刷新额度呈现同一身份。
 	s.refresher = NewSessionRefresher(func(req *http.Request) (*http.Response, error) {
-		client := s.browserHTTPClient(s.proxy.ImpersonateProfile(), "", refreshTimeout)
+		identityKey := ""
+		profile := s.proxy.ImpersonateProfile()
+		for _, cookie := range req.Cookies() {
+			if cookie.Name == "__Secure-next-auth.session-token" {
+				if token := s.findTokenBySessionToken(cookie.Value); token != "" {
+					if binding := s.FingerprintFor(token); binding != nil {
+						identityKey = binding["oai-device-id"]
+						if p := binding["impersonate"]; p != "" {
+							profile = p
+						}
+					}
+				}
+				break
+			}
+		}
+		client := s.browserHTTPClient(profile, identityKey, refreshTimeout)
 		if client == nil {
 			client = &http.Client{Timeout: refreshTimeout}
 		}
@@ -117,6 +134,21 @@ func NewAccountService(backend storage.Backend, config AccountConfig, proxy *Pro
 	})
 	s.items = s.loadAccounts()
 	return s
+}
+
+// findTokenBySessionToken 通过 session_token 反查账号的 access_token。
+func (s *AccountService) findTokenBySessionToken(sessionToken string) string {
+	if sessionToken = util.Clean(sessionToken); sessionToken == "" {
+		return ""
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	for _, item := range s.items {
+		if util.Clean(item["session_token"]) == sessionToken {
+			return util.Clean(item["access_token"])
+		}
+	}
+	return ""
 }
 
 func (s *AccountService) ListTokens() []string {
@@ -1313,6 +1345,14 @@ func (s *AccountService) RefreshAccountViaSession(accessToken, newAccessToken, n
 		return false
 	}
 	s.items[idx] = account
+	// token 换新后迁移指纹绑定,保证续签前后同一浏览器身份和代理哈希
+	if accessToken != newAccessToken {
+		if entry, ok := s.fingerprints[accessToken]; ok {
+			s.fingerprints[newAccessToken] = entry
+			delete(s.fingerprints, accessToken)
+			s.saveFingerprintsLocked()
+		}
+	}
 	if accessToken != newAccessToken {
 		s.migrateImageReservationLocked(accessToken, newAccessToken)
 		s.migrateBusyTokenLocked(accessToken, newAccessToken)
