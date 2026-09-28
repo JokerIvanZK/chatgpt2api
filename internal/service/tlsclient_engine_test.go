@@ -1,6 +1,7 @@
 package service
 
 import (
+	"net/http"
 	"testing"
 	"time"
 )
@@ -69,5 +70,34 @@ func TestVerifyProxyFallback(t *testing.T) {
 	direct := NewProxyService(fixedProxyConfig{})
 	if got := direct.resolveProxyCandidate(""); got != "" {
 		t.Fatalf("全局无代理时空候选应保持直连,got %q", got)
+	}
+}
+
+func TestOrderedHeaderNamesDeterministic(t *testing.T) {
+	header := http.Header{}
+	for _, name := range []string{"Referer", "Sec-Ch-Ua", "Accept-Language", "Authorization", "X-Custom-1", "X-Custom-2", "Accept"} {
+		header.Set(name, "v")
+	}
+	order := orderedHeaderNames(header)
+	// 首选顺序中的头按既定次序排列
+	want := []string{"Sec-Ch-Ua", "Authorization", "Accept", "Referer", "Accept-Language"}
+	if len(order) < len(want) {
+		t.Fatalf("顺序列表过短: %v", order)
+	}
+	for i, name := range want {
+		if order[i] != name {
+			t.Fatalf("顺序 %d = %s, want %s (full: %v)", i, order[i], name, order)
+		}
+	}
+	// 未列入首选的头按字典序垫底
+	if order[len(order)-2] != "X-Custom-1" || order[len(order)-1] != "X-Custom-2" {
+		t.Fatalf("自定义头应按字典序垫底: %v", order)
+	}
+	// 重复调用结果一致(确定序)
+	again := orderedHeaderNames(header)
+	for i := range order {
+		if order[i] != again[i] {
+			t.Fatalf("顺序不稳定")
+		}
 	}
 }

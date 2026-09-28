@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"sort"
 	"strings"
 	"time"
 
@@ -80,6 +81,55 @@ type tlsClientRoundTripper struct {
 	client tlsclient.HttpClient
 }
 
+// preferredHeaderOrder 是 Chrome fetch 风格的确定发送顺序(含本项目自定义头)。
+// fhttp 按 HeaderOrderKey 指定的顺序发送;若按 map 遍历拷贝则顺序随机,
+// 乱序请求头本身就是可被检测的信号。
+var preferredHeaderOrder = []string{
+	"Sec-Ch-Ua",
+	"Sec-Ch-Ua-Mobile",
+	"Sec-Ch-Ua-Platform",
+	"Content-Type",
+	"User-Agent",
+	"Authorization",
+	"Oai-Device-Id",
+	"Oai-Language",
+	"Accept",
+	"X-Openai-Target-Path",
+	"X-Openai-Target-Route",
+	"Origin",
+	"Sec-Fetch-Site",
+	"Sec-Fetch-Mode",
+	"Sec-Fetch-Dest",
+	"Referer",
+	"Accept-Encoding",
+	"Accept-Language",
+	"Priority",
+	"Cache-Control",
+	"Pragma",
+	"Oai-Session-Id",
+}
+
+// orderedHeaderNames 返回确定顺序的头名列表:首选顺序里存在的在前,
+// 其余按字典序排在后面,保证同一请求每次线上的顺序完全一致。
+func orderedHeaderNames(header http.Header) []string {
+	order := make([]string, 0, len(header))
+	present := make(map[string]bool, len(header))
+	for _, name := range preferredHeaderOrder {
+		if len(header[name]) > 0 {
+			order = append(order, name)
+			present[name] = true
+		}
+	}
+	rest := make([]string, 0, len(header))
+	for name := range header {
+		if !present[name] && name != fhttp.HeaderOrderKey && name != fhttp.PHeaderOrderKey {
+			rest = append(rest, name)
+		}
+	}
+	sort.Strings(rest)
+	return append(order, rest...)
+}
+
 func (t *tlsClientRoundTripper) RoundTrip(req *http.Request) (*http.Response, error) {
 	var body io.ReadCloser
 	if req.Body != nil {
@@ -89,9 +139,10 @@ func (t *tlsClientRoundTripper) RoundTrip(req *http.Request) (*http.Response, er
 	if err != nil {
 		return nil, err
 	}
-	for key, values := range req.Header {
-		for _, value := range values {
-			fReq.Header.Add(key, value)
+	fReq.Header[fhttp.HeaderOrderKey] = orderedHeaderNames(req.Header)
+	for _, name := range orderedHeaderNames(req.Header) {
+		for _, value := range req.Header[name] {
+			fReq.Header.Add(name, value)
 		}
 	}
 	fResp, err := t.client.Do(fReq)
@@ -113,6 +164,9 @@ func (t *tlsClientRoundTripper) RoundTrip(req *http.Request) (*http.Response, er
 		Request:          req,
 	}
 	for key, values := range fResp.Header {
+		if key == fhttp.HeaderOrderKey || key == fhttp.PHeaderOrderKey {
+			continue
+		}
 		resp.Header[key] = append([]string(nil), values...)
 	}
 	return resp, nil
