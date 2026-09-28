@@ -77,7 +77,8 @@ type AccountService struct {
 const (
 	defaultRemoteUserAgent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.0.0 Safari/537.36"
 	defaultRemoteSecCHUA   = `"Not:A-Brand";v="99", "Google Chrome";v="145", "Chromium";v="145"`
-	defaultRemoteProfile   = "chrome145"
+	// 与 backend.browserImpersonationProfile 同因：Chrome 指纹被 CF 识别，改用 Firefox 伪装。
+	defaultRemoteProfile = "firefox"
 )
 
 func NewAccountService(backend storage.Backend, config AccountConfig, proxy *ProxyService, logs *LogService) *AccountService {

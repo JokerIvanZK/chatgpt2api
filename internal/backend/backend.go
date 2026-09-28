@@ -30,7 +30,10 @@ const (
 	browserSecCHUAPlatformVersion = `"19.0.0"`
 	browserSecCHUAArch            = `"x86"`
 	browserSecCHUABitness         = `"64"`
-	browserImpersonationProfile   = "chrome145"
+	// Cloudflare 已能识别 surf 的 Chrome 指纹（chrome145 的 TLS/HTTP2 特征，2026-09
+	// 实测同一代理下所有 Chrome 系 profile 首页一律 403 challenge，Firefox 系全部 200）。
+	// Firefox 模板会同时强制配套的 Firefox UA 与 Accept，请求级 UA/sec-ch-ua 会被覆盖。
+	browserImpersonationProfile = "firefox"
 )
 
 type AccountLookup interface {
