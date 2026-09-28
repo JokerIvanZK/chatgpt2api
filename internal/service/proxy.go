@@ -106,6 +106,53 @@ func (s *ProxyService) Test(candidate string, timeout time.Duration) map[string]
 	return map[string]any{"ok": ok, "status": resp.StatusCode, "latency_ms": latency, "error": message}
 }
 
+// VerifyImpersonate 用指定伪装 profile 走给定代理请求 chatgpt.com 首页,
+// 实测该指纹当前能否通过 Cloudflare(candidate 为空则用全局代理,也允许
+// 为空串表示直连)。返回结构与 Test 对齐,附带 cf-mitigated 判定。
+func (s *ProxyService) VerifyImpersonate(candidate, profile string, timeout time.Duration) map[string]any {
+	if profile = strings.TrimSpace(profile); profile == "" {
+		profile = s.ImpersonateProfile()
+	}
+	client := browserHTTPClientForProfile(strings.TrimSpace(candidate), profile, timeout)
+	ctx, cancel := context.WithTimeout(context.Background(), timeout)
+	defer cancel()
+	req, _ := http.NewRequestWithContext(ctx, http.MethodGet, "https://chatgpt.com/", nil)
+	req.Header.Set("Accept", "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8")
+	req.Header.Set("Accept-Language", browserAcceptLanguage)
+	req.Header.Set("Sec-Fetch-Dest", "document")
+	req.Header.Set("Sec-Fetch-Mode", "navigate")
+	req.Header.Set("Sec-Fetch-Site", "none")
+	req.Header.Set("Upgrade-Insecure-Requests", "1")
+	start := time.Now()
+	resp, err := client.Do(req)
+	latency := time.Since(start).Milliseconds()
+	if err != nil {
+		message := err.Error()
+		if detail, ok := util.SummarizeUpstreamConnectionError(message); ok {
+			message = detail
+		}
+		return map[string]any{"ok": false, "status": 0, "latency_ms": latency, "error": message}
+	}
+	defer resp.Body.Close()
+	_, _ = io.Copy(io.Discard, io.LimitReader(resp.Body, 1<<16))
+	mitigated := resp.Header.Get("cf-mitigated")
+	challenged := strings.Contains(strings.ToLower(mitigated), "challenge")
+	var message any
+	switch {
+	case challenged:
+		message = fmt.Sprintf("被 Cloudflare 挑战 (cf-mitigated=%s)", mitigated)
+	case resp.StatusCode < 200 || resp.StatusCode >= 300:
+		message = resp.Status
+	}
+	return map[string]any{
+		"ok":           resp.StatusCode >= 200 && resp.StatusCode < 300 && !challenged,
+		"status":       resp.StatusCode,
+		"latency_ms":   latency,
+		"cf_mitigated": mitigated,
+		"error":        message,
+	}
+}
+
 func browserHTTPClient(proxy string, timeout time.Duration) *http.Client {
 	return browserHTTPClientForProfile(proxy, "", timeout)
 }

@@ -1738,3 +1738,18 @@ export async function testProxy(url?: string) {
     body: { url: url ?? "" },
   });
 }
+
+export type ImpersonateVerifyResult = {
+  ok: boolean;
+  status: number;
+  latency_ms: number;
+  error?: string | null;
+  cf_mitigated?: string;
+};
+
+export async function verifyImpersonate(impersonate: string, url?: string) {
+  return httpRequest<{ result: ImpersonateVerifyResult }>("/api/settings/verify-impersonate", {
+    method: "POST",
+    body: { impersonate, url: url ?? "" },
+  });
+}

@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Dices, LoaderCircle, Plus, Save, Trash2, Waves } from "lucide-react";
+import { BadgeCheck, Dices, LoaderCircle, Plus, Save, ShieldCheck, Trash2, Waves } from "lucide-react";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -14,6 +14,8 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+
+import { verifyImpersonate, type ImpersonateVerifyResult } from "@/lib/api";
 
 import { useSettingsStore } from "../store";
 
@@ -66,6 +68,9 @@ export function FingerprintPoolCard() {
   const [manualProfile, setManualProfile] = useState(PROFILE_OPTIONS[0]);
   const [manualLabel, setManualLabel] = useState("");
 
+  const [verifying, setVerifying] = useState<Record<string, boolean>>({});
+  const [verifyResults, setVerifyResults] = useState<Record<string, ImpersonateVerifyResult | null>>({});
+
   const config = useSettingsStore((state) => state.config);
   const isLoadingConfig = useSettingsStore((state) => state.isLoadingConfig);
   const isSavingConfig = useSettingsStore((state) => state.isSavingConfig);
@@ -88,6 +93,49 @@ export function FingerprintPoolCard() {
 
   const handleSave = async () => {
     await saveConfig();
+  };
+
+  const runVerify = async (key: string, profile: string) => {
+    setVerifying((prev) => ({ ...prev, [key]: true }));
+    setVerifyResults((prev) => ({ ...prev, [key]: null }));
+    try {
+      const data = await verifyImpersonate(profile);
+      setVerifyResults((prev) => ({ ...prev, [key]: data.result }));
+    } catch (error) {
+      setVerifyResults((prev) => ({
+        ...prev,
+        [key]: { ok: false, status: 0, latency_ms: 0, error: error instanceof Error ? error.message : "验证失败" },
+      }));
+    } finally {
+      setVerifying((prev) => ({ ...prev, [key]: false }));
+    }
+  };
+
+  const runVerifyAll = async (items: Array<{ key: string; profile: string }>) => {
+    for (const item of items) {
+      await runVerify(item.key, item.profile);
+    }
+  };
+
+  const verifyChip = (key: string) => {
+    if (verifying[key]) {
+      return <LoaderCircle className="size-4 animate-spin text-stone-400" />;
+    }
+    const result = verifyResults[key];
+    if (!result) {
+      return null;
+    }
+    return result.ok ? (
+      <span className="inline-flex items-center gap-1 text-xs font-medium text-emerald-700">
+        <BadgeCheck className="size-4" />
+        通过 {result.status} · {result.latency_ms}ms
+      </span>
+    ) : (
+      <span className="inline-flex items-center gap-1 text-xs font-medium text-rose-700">
+        <ShieldCheck className="size-4" />
+        {result.error ? String(result.error) : `HTTP ${result.status}`}
+      </span>
+    );
   };
 
   return (
@@ -129,6 +177,16 @@ export function FingerprintPoolCard() {
                     <span className="flex-1 truncate font-mono text-xs text-stone-400">
                       {item["oai-device-id"] ? `${item["oai-device-id"].slice(0, 13)}…` : "设备 ID 自动生成"}
                     </span>
+                    {verifyChip(`entry-${index}`)}
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="h-8 rounded-lg px-2 text-xs text-stone-500 hover:text-stone-800"
+                      onClick={() => void runVerify(`entry-${index}`, item.impersonate)}
+                      disabled={verifying[`entry-${index}`]}
+                    >
+                      验证
+                    </Button>
                     <Button
                       variant="ghost"
                       size="icon"
@@ -148,6 +206,21 @@ export function FingerprintPoolCard() {
             )}
 
             <div className="flex flex-wrap items-center gap-2">
+              {current.length > 0 ? (
+                <Button
+                  variant="outline"
+                  className="h-10 rounded-xl border-stone-200 bg-white px-4 text-stone-700"
+                  onClick={() =>
+                    void runVerifyAll(
+                      current.map((item, index) => ({ key: `entry-${index}`, profile: item.impersonate })),
+                    )
+                  }
+                  disabled={Object.values(verifying).some(Boolean)}
+                >
+                  <ShieldCheck className="size-4" />
+                  验证全部条目
+                </Button>
+              ) : null}
               <Button
                 variant="outline"
                 className="h-10 rounded-xl border-stone-200 bg-white px-4 text-stone-700"
@@ -217,6 +290,45 @@ export function FingerprintPoolCard() {
               <p className="w-full text-xs text-stone-400">
                 手动添加默认自动生成设备 ID；如需固定设备身份，可在保存后编辑 data 中对应的
                 fingerprint_pool JSON。
+              </p>
+            </div>
+
+            <div className="space-y-2 rounded-xl border border-stone-200 p-3">
+              <div className="flex items-center justify-between">
+                <span className="text-sm font-medium text-stone-700">内置变体可用性</span>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="h-8 rounded-lg px-2 text-xs text-stone-500 hover:text-stone-800"
+                  onClick={() =>
+                    void runVerifyAll(PROFILE_OPTIONS.map((profile) => ({ key: `builtin-${profile}`, profile })))
+                  }
+                  disabled={Object.values(verifying).some(Boolean)}
+                >
+                  全部验证
+                </Button>
+              </div>
+              <div className="flex flex-wrap gap-2">
+                {PROFILE_OPTIONS.map((profile) => (
+                  <span
+                    key={profile}
+                    className="inline-flex items-center gap-2 rounded-lg border border-stone-200 bg-white px-2.5 py-1.5 text-xs"
+                  >
+                    <span className="font-mono text-stone-600">{profile}</span>
+                    {verifyChip(`builtin-${profile}`)}
+                    <button
+                      type="button"
+                      className="text-stone-400 hover:text-stone-700"
+                      onClick={() => void runVerify(`builtin-${profile}`, profile)}
+                      disabled={verifying[`builtin-${profile}`]}
+                    >
+                      验证
+                    </button>
+                  </span>
+                ))}
+              </div>
+              <p className="text-xs text-stone-400">
+                验证会走当前全局代理请求 chatgpt.com 首页，返回 200 表示该指纹当前可通过 Cloudflare。
               </p>
             </div>
 

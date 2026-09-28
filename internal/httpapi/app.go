@@ -1121,6 +1121,22 @@ func (a *App) handleProxy(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
+// handleImpersonateVerify 实测某个伪装指纹走当前代理能否通过 chatgpt.com
+// 首页的 Cloudflare 校验;body 可选 url 覆盖代理。
+func (a *App) handleImpersonateVerify(w http.ResponseWriter, r *http.Request) {
+	if _, ok := a.requireIdentity(w, r, ""); !ok {
+		return
+	}
+	if r.Method != http.MethodPost {
+		w.WriteHeader(http.StatusMethodNotAllowed)
+		return
+	}
+	body, _ := readJSONMap(r)
+	profile := strings.TrimSpace(util.Clean(body["impersonate"]))
+	result := a.proxy.VerifyImpersonate(util.Clean(body["url"]), profile, 25*time.Second)
+	util.WriteJSON(w, http.StatusOK, map[string]any{"result": result})
+}
+
 func (a *App) requireIdentity(w http.ResponseWriter, r *http.Request, overrideAuth string) (service.Identity, bool) {
 	token := overrideAuthToken(overrideAuth, r)
 	if identity := a.auth.Authenticate(token); identity != nil {

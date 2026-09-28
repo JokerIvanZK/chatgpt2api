@@ -80,6 +80,7 @@ func (a *App) routes() []appRoute {
 		exact(http.MethodGet, "/api/logs", a.handleLogs),
 		exact("", "/api/proxy", a.handleProxy),
 		exact("", "/api/proxy/test", a.handleProxy),
+		exact("", "/api/settings/verify-impersonate", a.handleImpersonateVerify),
 		exact(http.MethodGet, "/api/storage/info", a.handleStorageInfo),
 
 		prefix("/images/", a.handleImageFile),
